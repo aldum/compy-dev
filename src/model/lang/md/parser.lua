@@ -49,15 +49,6 @@ require("util.dequeue")
 --- @field children mdAST[]
 --- @field pos? string[]
 
-local types = {
-  heading     = true,
-  emph        = true,
-  strong      = true,
-  link        = true,
-  list_marker = true,
-  inline      = true, -- verbatim
-}
-
 local tag_to_type = {
   str        = 'default',
   heading    = 'heading',
@@ -70,12 +61,16 @@ local tag_to_type = {
   image      = 'link',
 }
 
+local function logwarn(wt)
+  Log.debug(Debug.terse_ast(wt, true))
+end
 --- @param input str
 --- @param skip_posinfo boolean?
+--- @return AST -- djot AST, distinct from metalua
 local function parse(input, skip_posinfo)
   local text = string.unlines(input)
   local posinfo = not (skip_posinfo == true)
-  return djot.parse(text, posinfo)
+  return djot.parse(text, posinfo, logwarn)
 end
 
 --- courtesy of Claude
