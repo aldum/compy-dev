@@ -9,6 +9,7 @@ Similar to `update()`, we can override the `love.draw()` function and have the L
 Drawing generally follows a simple procedure: set up some values, such as what foreground and background color to use, then build up our desired image using basic elements. These are called graphics "primitives", and we can access them from the `love.graphics` table (aliased here as `G`).
 
 So, our example clock:
+
 ```lua
 function love.draw()
   G.setColor(Color[color + Color.bright])
@@ -27,12 +28,15 @@ Having done this, we need to _provide_ the text being displayed (`getTimestamp()
 The way the `print` helper, and most graphics helpers work, is by starting drawing at the coordinates provided, but these coordinates will point to the leftmost and topmost (remember, x grows downwards in screen coordinates) corner of the element being displayed.
 So, we need to determine the half-width and half-height of our text object to correctly draw it at the center. To do this, we can use the `getWidth()` and `getHeight()` helpers.
 We determined the midpoint of the screen earlier:
+
 ```lua
 width, height = G.getDimensions()
 midx = width / 2
 midy = height / 2
 ```
+
 Armed with this, we can draw the time dead center:
+
 ```lua
 G.print(text, midx - off_x, midy - off_y)
 ```
@@ -42,6 +46,7 @@ G.print(text, midx - off_x, midy - off_y)
 To keep time, we'll do two things: first, ask what it is currently, then increment the value every second.
 
 First, declare some variables and constants:
+
 ```lua
 local M = 60 -- seconds in a minute, minutes in an hour
 local H = m * m -- seconds in an hour
@@ -65,12 +70,14 @@ Reading the current time is achieved by using `os.date()`, which unlike `os.time
 #### Timekeeping
 
 Using the update function, we can keep track of time elapsed:
+
 ```lua
 function love.update(dt)
   t = t + dt
 end
 ```
 Going back from the number of seconds to a human-readable time will require some division:
+
 ```lua
 local function pad(i)
   return string.format("%02d", i)

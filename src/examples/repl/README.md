@@ -9,6 +9,7 @@ The process of reading values from console has a necessarily asynchronous nature
 Hence, it has to consist of multiple steps: first, we create a handle; then initiate the prompt, and only when the user is finished, can we read the data supplied.
 
 How this translates into code:
+
 ```lua
 -- create a handle
 r = user_input()
@@ -26,14 +27,15 @@ end
 
 There are two options available:
 * `input_text()` for plaintext
-* `input_code()` which only accepts syntactically valid lua 
+* `input_code()` which only accepts syntactically valid lua
 (Validated input is not discussed here, see the 'valid' project)
 
 #### Update
 
 To create interactivity, a program needs to run continuously, waiting for input and reacting to it.
-In LOVE2D, this is achieved by overriding various handlers, the first of which is `update()`. 
+In LOVE2D, this is achieved by overriding various handlers, the first of which is `update()`.
 By defining `love.update()`, we can control what happens when time passes:
+
 ```lua
 function love.update(dt)
   repl()

@@ -79,10 +79,23 @@ without moving, press <kbd>Esc</kbd>.
     .. list ..
     refs
 
+local code = [[
+text:
+
+```lua
+local function pad(i)
+
+end
+function getTimestamp()
+end
+```
+]]
+
 return {
   sect,
   list,
   fmd,
   link,
   fst .. refs,
+  code,
 }

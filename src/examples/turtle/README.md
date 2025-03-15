@@ -13,6 +13,7 @@ There are two potential pitfalls to look out for here:
 * Don't declare variables or functions `local` if you want to use it from the outside world.
 
 Example in `main.lua`:
+
 ```lua
 require('action')
 ```
@@ -25,6 +26,7 @@ Since we are controlling the turtle programmatically, it makes a lot of sense to
 Effectively this means that instead of calculating the coordinates for every element we want to draw, we change the coordinate system first, and draw in it's terms, which is often more convenient.
 
 For the most simple example of this, let's represent the turtle with only an ellipse with a major radius `y_r` and a minor radius `x_r`:
+
 ```lua
 local x_r = 15
 local y_r = 20
@@ -51,6 +53,7 @@ Using the second method, we are able to provide the head position in "turtle coo
 So far, there's nothing about this we couldn't have done the other route, but let's proceed to the legs, which we want to draw at an angle. LOVE doesn't provide us any way to do this with only the ellipse function, we do need to `rotate` first.
 
 See this condensed example:
+
 ```lua
 function frontLeftLeg(x, y, x_r, y_r, leg_xr, leg_yr)
   G.setColor(Color[Color.green + Color.bright])
@@ -75,6 +78,7 @@ The `rotate` function takes a radian value as it's argument. We want the legs at
 
 You will notice that the actual code does not look like that. For one, in the leg-drawing functions, there's only one `translate()` call, because they are happening relative to the turtle, we already moved where the turtle is.
 Another, more interesting difference is the `push()` - `pop()` pairs around each leg.
+
 ```lua
 --- left front leg
 G.push("all")
