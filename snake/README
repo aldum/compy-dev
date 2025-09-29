@@ -1,0 +1,112 @@
+# snake
+
+A classic grid-based Snake implemented for LÖVE2D / Compy.
+The idea: you move a snake on a cell grid, eat apples to grow, and avoid colliding with walls or yourself. One key press at a time decides your fate — elegant, minimal, teachable.
+
+### Screen / grid
+
+We use a logical grid of `CW × CH` cells, each cell rendered as a `UNIT`-sized square. Positions are stored in grid coordinates (integers), then mapped to pixels when drawing. This keeps the game logic clean and makes the code easy to reason about.
+
+```lua
+local UNIT = 10
+local CW, CH = 102, 60   -- grid in cells
+-- pixel = cell * UNIT
+local function cell_px(c) return c * UNIT end
+```
+
+### Files
+
+This example is intentionally compact: a single `main.lua` with clear sections (graphics, input, collisions, placement, lifecycle). It follows the Compy formatting constraints (≤64 chars per line; functions/tables ≤14 lines; ≤4 args per function; nesting ≤4; no complex inline expressions).
+
+### Controls
+
+WASD or arrow keys to steer.
+`G` toggles a thin debug grid; `SPACE` restarts; `ESC` quits. Controls are handled with short, explicit helpers (`turn_left`, `turn_right`, `turn_up`, `turn_down`) and a small dispatcher for running vs. game-over states.
+
+```lua
+-- Running state
+if key == "g" then SHOW_GRID = not SHOW_GRID end
+if key == "space" then love.handlers.start() end
+if key == "escape" then love.event.quit() end
+```
+
+### Game loop
+
+`love.update(dt)` accumulates time; when it reaches `speed`, the snake advances one cell. Movement is split into tiny functions so the logic stays readable and testable. On each tick we: advance the snake → try to eat → check collisions → possibly switch to `gameover`.
+
+```lua
+timer = timer + dt
+if timer >= speed then
+  timer = 0
+  advance_snake()
+  try_eat()
+  if head_hits_wall() or head_hits_body() then
+    STATUS = "gameover"
+  end
+end
+```
+
+### Apple placement
+
+We build a boolean map of free cells, pick a random index within the free count, and walk the grid to choose that cell. This avoids infinite loops and keeps the distribution uniform enough for teaching purposes.
+
+```lua
+local function pick_free_cell()
+  local total = CW * CH - #snake
+  local k = math.random(total)
+  local count = 0
+  local map = build_free_map()
+  for j = 0, CH - 1 do
+    for i = 0, CW - 1 do
+      if map[j * CW + i] then
+        count = count + 1
+        if count == k then return { x = i, y = j } end
+      end
+    end
+  end
+end
+```
+
+### Collision rules
+
+* **Walls**: head outside `[0..CW-1] × [0..CH-1]` → game over.
+* **Self**: head matches any body segment → game over.
+  These checks are short, explicit, and easy to read in a classroom setting.
+
+### Drawing
+
+* **Snake**: head and body are rounded rectangles; head uses a darker green.
+* **Apple**: small rounded red square.
+* **Grid** (optional): ultra-thin lines every `UNIT` for orientation when teaching. All drawing goes through tiny helpers like `rect_fill` to keep line length and intent tidy.
+
+```lua
+G.setColor(0, 0.8, 0)
+rect_fill(cell_px(x), cell_px(y), UNIT, UNIT, 5)
+```
+
+### Lifecycle / bootstrap
+
+A single `love.handlers.start()` seeds RNG, centers an initial 3-segment snake, sets movement to the right, and places the first apple. For non-Compy local runs, `love.load()` sets the window size and then calls the same starter, keeping behavior consistent across environments.
+
+
+
+#### Boolean and tiny helpers
+
+* `rnd(n)`: wrapper over `math.random` for clarity in teaching.
+* `cell_px(c)`: converts grid units to pixels (intuitive mental model).
+* `rect_fill(...)`: rounded rectangle with a single call site.
+  These are tiny on purpose, making inline expressions unnecessary.
+
+#### Direction handling
+
+Movement functions mutate only the head’s coordinate; the body then shifts forward. Clear, imperative steps are easier for beginners to trace in their heads (and debug).
+
+```lua
+direction.right = function() snake[1].x = snake[1].x + 1 end
+```
+### Teaching notes
+
+* The grid model decouples logic from pixels: great for exercises (e.g., wrap-around mode as a variant).
+* The apple placement strategy demonstrates mapping 2D coordinates into a linear index — a common technique in games and graphics.
+* Splitting input handling by state (`running` vs. `gameover`) avoids deep nesting and makes state machines approachable.
+
