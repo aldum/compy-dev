@@ -242,7 +242,7 @@ jobs:
           VER: ${{ github.ref_name }}
         run: echo VER_CODE="$(echo $VERSION | sed -e 's/^v//' -e 's/\.//g')" >> $GITHUB_ENV
       - name: Package for android
-        uses: compy-toys/love-actions-android@v0.2.5
+        uses: compy-toys/love-actions-android@v0.2.6
         with:
           love-ref: "compy"
           no-soft-keyboard: "enabled"
