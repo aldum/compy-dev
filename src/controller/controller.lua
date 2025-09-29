@@ -376,7 +376,11 @@ Controller = {
           end
           local user_input = get_user_input()
           if user_input then
-            user_input.V:draw(user_input.C:get_input(), C.time)
+            if love.DEBUG then
+              user_input.V:draw(user_input.C:get_input(), C.time)
+            else
+              user_input.V:draw(user_input.C:get_input())
+            end
           end
         end
         View.prev_draw = draw
