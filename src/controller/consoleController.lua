@@ -194,7 +194,7 @@ local function project_require(cc, name)
     local pr_env = cc:get_project_env()
     if chunk then
       setfenv(chunk, pr_env)
-      chunk()
+      return chunk()
     else
       --- hack around love.js not having the bit lib
       if name == 'bit' and _G.web then
