@@ -389,9 +389,29 @@ local full = {
     { line = 75, name = 'love.keyreleased', type = 'function', },
   }, {})),
 }
+
+local req = {
+  prep({
+    'require ("math")',
+    'x = sin(pi)',
+  }, SemanticInfo({
+    { name = 'x', line = 2, type = 'global' }
+  }, {
+    { name = 'math', line = 1 }
+  })),
+  prep({
+    'require("action")',
+    'print "req test"',
+    'require("drawing")',
+  }, SemanticInfo({
+  }, {
+    { name = 'action',  line = 1 },
+    { name = 'drawing', line = 3 },
+  })),
 }
 
 return {
-  { 'simple', simple },
-  { 'full',   full },
+  { 'simple',  simple },
+  { 'full',    full },
+  { 'require', req },
 }
