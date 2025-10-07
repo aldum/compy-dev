@@ -6,7 +6,8 @@ require("view.input.customStatus")
 local class = require('util.class')
 
 --- @param M EditorModel
-local function new(M)
+--- @oaram CC ConsoleController
+local function new(M, CC)
   return {
     input = UserInputController(M.input, nil, true),
     model = M,
@@ -14,6 +15,7 @@ local function new(M)
       M.search,
       UserInputController(M.search.input, nil, true)
     ),
+    console = CC,
     view = nil,
     mode = 'edit',
   }
@@ -28,6 +30,7 @@ end
 --- @field model EditorModel
 --- @field input UserInputController
 --- @field search SearchController
+--- @field console ConsoleController
 --- @field view EditorView?
 --- @field state EditorState?
 --- @field mode EditorMode

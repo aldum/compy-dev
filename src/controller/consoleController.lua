@@ -35,13 +35,11 @@ function ConsoleController.new(M, main_ctrl)
   local config = M.cfg
   pre_env.font = config.view.font
   local IC = UserInputController(M.input)
-  local EC = EditorController(M.editor)
   local self = setmetatable({
     time        = 0,
     model       = M,
     main_ctrl   = main_ctrl,
     input       = IC,
-    editor      = EC,
     -- console runner env
     main_env    = env,
     -- copy of the application's env before the prep
@@ -58,6 +56,9 @@ function ConsoleController.new(M, main_ctrl)
 
     cfg         = config
   }, ConsoleController)
+  --- the editor has to know about us
+  local EC = EditorController(M.editor, self)
+  self.editor = EC
   -- initialize the stub env tables
   ConsoleController.prepare_env(self)
   ConsoleController.prepare_project_env(self)
