@@ -223,12 +223,48 @@ local function get_assignments(ast)
   return assignments
 end
 
+--- requires
+
+--- @param node AST
+--- @return Require[]
+local function req_extractor(node)
+  local calltags = { 'Call' }
+  if type(node) == 'table' and node.tag then
+    local tag = node.tag
+    if table.is_member(calltags, tag) then
+      local lhs = node[1]
+      local rhs = node[2]
+
+      if tag == 'Call'
+          and lhs.tag == 'Id' and lhs[1] == 'require'
+      then
+        local val = rhs[1]
+        local li  = get_line_number(rhs)
+        return { { line = li, name = val } }
+      end
+    end
+  end
+  return {}
+end
+
+--- @param ast AST
+--- @return Require[]
+local function get_requires(ast)
+  local candidates = table.flatten(
+    Tree.preorder(ast, req_extractor)
+  )
+  local reqs = {}
+  for _, v in ipairs(candidates or {}) do
+    table.insert(reqs, v)
+  end
+  return reqs
+end
 
 --- @param ast AST
 --- @return string[]
 local function analyze(ast)
   local assignments = get_assignments(ast)
-  local reqs = {}
+  local reqs = get_requires(ast)
   return SemanticInfo(assignments, reqs)
 end
 
