@@ -1,19 +1,7 @@
 require('util.tree')
+require('model.lang.lua.semantic_info')
 
---- @alias AssignmentType
---- | 'function'
---- | 'method'
---- | 'local'
---- | 'global'
---- | 'field'
-
---- @class Assignment
---- @field name string
---- @field line integer
---- @field type AssignmentType
-
---- @class SemanticInfo
---- @field assignments Assignment[]
+--- utils
 
 local keywords_list = {
   "and",
@@ -42,6 +30,16 @@ local keywords = {}
 for _, kw in pairs(keywords_list) do
   keywords[kw] = true
 end
+
+--- @param n AST
+--- @return number?
+local function get_line_number(n)
+  local li = n.lineinfo
+  local li_f = type(li) == 'table' and li.first
+  return type(li_f) == 'table' and li_f.line or nil
+end
+
+--- assignments
 
 --- @param ast AST
 --- @return string?
@@ -81,15 +79,6 @@ end
 --- @return table?
 local function definition_extractor(node)
   local deftags = { 'Local', 'Localrec', 'Set' }
-
-  local function get_line_number(n)
-    local li = n.lineinfo
-    local li_f = type(li) == 'table' and li.first
-    return type(li_f) == 'table' and li_f.line
-  end
-  local function get_lhs_name(n)
-    return n[1]
-  end
 
   if type(node) == 'table' and node.tag then
     local tag = node.tag
@@ -170,7 +159,7 @@ local function definition_extractor(node)
           at = 'global'
         end
         for i, w in ipairs(lhs) do
-          local n = get_lhs_name(w)
+          local n = w[1]
           if is_local and not rhs[i] then
             dec_only = true
           end
@@ -203,8 +192,8 @@ local function defmatch(name)
 end
 
 --- @param ast AST
---- @return SemanticInfo
-local function analyze(ast)
+--- @return Assignment[]
+local function get_assignments(ast)
   local sets = table.flatten(
     Tree.preorder(ast, definition_extractor)
   )
@@ -231,7 +220,16 @@ local function analyze(ast)
       table.insert(candidates, v)
     end
   end
-  return { assignments = assignments }
+  return assignments
+end
+
+
+--- @param ast AST
+--- @return string[]
+local function analyze(ast)
+  local assignments = get_assignments(ast)
+  local reqs = {}
+  return SemanticInfo(assignments, reqs)
 end
 
 return {
