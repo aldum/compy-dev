@@ -124,7 +124,7 @@ local function func_tween(tween, self, len, subject, target, method, after,
 	 to_func_tween[subject] = {}
       end
 
-      ref = {getter(subject)}
+      local ref = { getter(subject) }
       to_func_tween[subject][k] = {ref, setter}
       if type(v) == 'number' or #ref == 1 then
 	 v = {v}

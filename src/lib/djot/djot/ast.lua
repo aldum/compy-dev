@@ -416,7 +416,7 @@ local function to_ast(parser, sourcepos)
   local subject = parser.subject
   local warn = parser.warn
   if not warn then
-    warn = function() end
+    warn = function(o) end
   end
   local sourceposmap
   if sourcepos then

@@ -150,7 +150,7 @@ local function utils()
   if not love.harmony then return end
   if love.harmony.utils then return end
 
-  gfx = love.graphics
+  local gfx = love.graphics
 
   --- @param name love.Event
   local love_event = function(name, ...)
