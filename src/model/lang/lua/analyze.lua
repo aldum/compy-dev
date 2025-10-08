@@ -31,7 +31,7 @@ for _, kw in pairs(keywords_list) do
   keywords[kw] = true
 end
 
---- @param n AST
+--- @param n luaAST
 --- @return number?
 local function get_line_number(n)
   local li = n.lineinfo
@@ -41,7 +41,7 @@ end
 
 --- assignments
 
---- @param ast AST
+--- @param ast luaAST
 --- @return string?
 local function get_idx_stack(ast)
   --- @return string?
@@ -59,7 +59,7 @@ local function get_idx_stack(ast)
   return go(ast)
 end
 
---- @param node AST
+--- @param node luaAST
 --- @return boolean
 local function is_idx_stack(node)
   local st = get_idx_stack(node)
@@ -75,7 +75,7 @@ local function is_ident(id)
   return string["match"](id, "^[%a_][%w_]*$") and not keywords[id]
 end
 
---- @param node AST
+--- @param node luaAST
 --- @return table?
 local function definition_extractor(node)
   local deftags = { 'Local', 'Localrec', 'Set' }
@@ -191,7 +191,7 @@ local function defmatch(name)
   end
 end
 
---- @param ast AST
+--- @param ast luaAST
 --- @return Assignment[]
 local function get_assignments(ast)
   local sets = table.flatten(
@@ -225,7 +225,7 @@ end
 
 --- requires
 
---- @param node AST
+--- @param node luaAST
 --- @return Require[]
 local function req_extractor(node)
   local calltags = { 'Call' }
@@ -247,7 +247,7 @@ local function req_extractor(node)
   return {}
 end
 
---- @param ast AST
+--- @param ast luaAST
 --- @return Require[]
 local function get_requires(ast)
   local candidates = table.flatten(
@@ -260,7 +260,7 @@ local function get_requires(ast)
   return reqs
 end
 
---- @param ast AST
+--- @param ast luaAST
 --- @return string[]
 local function analyze(ast)
   local assignments = get_assignments(ast)
