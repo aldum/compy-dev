@@ -53,16 +53,16 @@ function BufferView:open(buffer)
   if not self.buffer then
     error('no buffer')
   end
-  local cont = buffer.content_type
-  self.content_type = cont
+  local ct = buffer.content_type
+  self.content_type = ct
 
-  if cont == 'plain' or cont == 'md' then
+  if ct == 'plain' or ct == 'md' then
     local bufcon = buffer:get_text_content()
     self.buffer:highlight()
     self.content = VisibleContent(
       self.w, bufcon, self.SCROLL_BY, L)
     self.hl = self.buffer:get_highlight()
-  elseif cont == 'lua' then
+  elseif ct == 'lua' then
     local bufcon = buffer:get_content()
     self.content =
         VisibleStructuredContent(
