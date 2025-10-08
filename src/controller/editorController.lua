@@ -85,10 +85,18 @@ function EditorController:open(name, content, save)
   end
 
   local b = BufferModel(name, content, save, ch, hl, pp)
-  self.model.buffer = b
+  self.model.buffers:push_front(b)
   self.view.buffer:open(b)
   self:update_status()
   self:set_state()
+end
+
+--- @private
+function EditorController:_dump_bufferlist()
+  for i, v in ipairs(self.model.buffers) do
+    Log.debug(i, v.name)
+  end
+  orig_print()
 end
 
 function EditorController:follow_require()
@@ -99,10 +107,20 @@ function EditorController:follow_require()
   local reqsel = table.find_by_v(reqs, function(r)
     return r.block == bn
   end)
+
   if reqsel then
     local name = reqsel.name
     self.console:edit(name .. '.lua')
   end
+end
+
+function EditorController:pop_buffer()
+  local bs = self.model.buffers
+  local n_buffers = bs:length()
+  if n_buffers < 2 then return end
+  bs:pop_front()
+  local b = bs:first()
+  self.view.buffer:open(b)
 end
 
 --- @param m EditorMode
@@ -216,7 +234,7 @@ end
 
 --- @return BufferModel
 function EditorController:get_active_buffer()
-  return self.model.buffer
+  return self.model.buffers:first()
 end
 
 --- @private
@@ -629,7 +647,11 @@ function EditorController:_normal_mode_keys(k)
 
     -- step into
     if k == "f4" then
-      self:follow_require()
+      if not Key.shift() then
+        self:follow_require()
+      else
+        self:pop_buffer()
+      end
     end
   end
   local function clear()

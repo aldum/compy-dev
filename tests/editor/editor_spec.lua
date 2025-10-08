@@ -130,7 +130,7 @@ describe('Editor #editor', function()
         assert.same(start_sel - 1, buffer:get_selection())
         mock.keystroke('up', press)
         assert.same(start_sel - 2, buffer:get_selection())
-        assert.same(turtle_doc[2], model.buffer:get_selected_text())
+        assert.same(turtle_doc[2], buffer:get_selected_text())
         --- load it
         local input = function()
           return controller.input:get_text():items()
@@ -190,7 +190,7 @@ describe('Editor #editor', function()
       local save = TU.get_save_function(sierpinski)
       --- use it as plaintext for this test
       controller:open('sierpinski.txt', sierpinski, save)
-      view.buffer:open(model.buffer)
+      view.buffer:open(controller:get_active_buffer())
 
       local visible = view.buffer.content
       local scroll = view.buffer.SCROLL_BY
@@ -238,7 +238,6 @@ describe('Editor #editor', function()
       local l = 6
 
       local controller, _, view = wire(getMockConf(27, l))
-      local model = controller.model
 
       local save = TU.get_save_function(sierpinski)
       controller:open('sierpinski.txt', sierpinski, save)
@@ -250,7 +249,7 @@ describe('Editor #editor', function()
       local buffer = controller:get_active_buffer()
       --- @type BufferView
       local bv = view.buffer
-      bv:open(model.buffer)
+      bv:open(buffer)
 
       local visible = view.buffer.content
       local scroll = view.buffer.SCROLL_BY
