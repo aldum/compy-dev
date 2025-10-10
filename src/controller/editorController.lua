@@ -646,11 +646,13 @@ function EditorController:_normal_mode_keys(k)
     end
 
     -- step into
-    if k == "f4" then
-      if not Key.shift() then
-        self:follow_require()
-      else
-        self:pop_buffer()
+    if Key.ctrl() then
+      if k == "o" then
+        if not Key.shift() then
+          self:follow_require()
+        else
+          self:pop_buffer()
+        end
       end
     end
   end
