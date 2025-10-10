@@ -111,6 +111,8 @@ function EditorController:follow_require()
   if reqsel then
     local name = reqsel.name
     self.console:edit(name .. '.lua')
+  else
+    self:pop_buffer()
   end
 end
 
@@ -648,11 +650,7 @@ function EditorController:_normal_mode_keys(k)
     -- step into
     if Key.ctrl() then
       if k == "o" then
-        if not Key.shift() then
-          self:follow_require()
-        else
-          self:pop_buffer()
-        end
+        self:follow_require()
       end
     end
   end
