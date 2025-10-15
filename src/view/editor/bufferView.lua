@@ -139,7 +139,7 @@ function BufferView:refresh(moved)
     local sel = self.buffer:get_selection()
     if self.content_type == 'lua' then
       local vsc = self.content
-      local blocks = vsc.blocks
+      local blocks = vsc.v_blocks
       blocks:move(moved, sel)
       vsc:recalc_range()
     else
