@@ -28,7 +28,7 @@ end
 --- @class BufferView : ViewBase
 --- @field content VisibleContent|VisibleStructuredContent
 --- @field content_type ContentType
---- @field buffer BufferModel
+--- @field buffers Dequeue<BufferModel>
 ---
 --- @field LINES integer
 --- @field SCROLL_BY integer
@@ -252,6 +252,10 @@ function BufferView:follow_selection()
     if dir and d then self:scroll(dir, d) end
   end
 end
+
+--------------
+---  draw  ---
+--------------
 
 --- @param special boolean
 function BufferView:draw(special)

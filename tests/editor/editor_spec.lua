@@ -190,10 +190,11 @@ describe('Editor #editor', function()
       local save = TU.get_save_function(sierpinski)
       --- use it as plaintext for this test
       controller:open('sierpinski.txt', sierpinski, save)
-      view.buffer:open(controller:get_active_buffer())
+      local buf = controller:get_active_buffer()
+      local bv = view:open(buf)
 
-      local visible = view.buffer.content
-      local scroll = view.buffer.SCROLL_BY
+      local visible = bv.content
+      local scroll = bv.SCROLL_BY
 
       local off = #sierpinski - l + 1
       local start_range = Range(off + 1, #sierpinski + 1)
@@ -201,7 +202,7 @@ describe('Editor #editor', function()
       it('loads', function()
         --- inital scroll is at EOF, meaning last l lines are visible
         --- plus the phantom line
-        assert.same(off, view.buffer.offset)
+        assert.same(off, bv.offset)
         assert.same(start_range, visible.range)
       end)
       local base = Range(1, l)
@@ -248,11 +249,11 @@ describe('Editor #editor', function()
 
       local buffer = controller:get_active_buffer()
       --- @type BufferView
-      local bv = view.buffer
-      bv:open(buffer)
+      local bv = view:open(buffer)
+      -- bv:open(buffer)
 
-      local visible = view.buffer.content
-      local scroll = view.buffer.SCROLL_BY
+      local visible = bv.content
+      local scroll = bv.SCROLL_BY
 
       local clen = visible:get_content_length()
       local off = clen - l + 1
@@ -260,7 +261,7 @@ describe('Editor #editor', function()
       it('loads', function()
         --- inital scroll is at EOF, meaning last l lines are visible
         --- plus the phantom line
-        assert.same(off, view.buffer.offset)
+        assert.same(off, bv.offset)
         assert.same(start_range, visible.range)
       end)
       local base = Range(1, l)
