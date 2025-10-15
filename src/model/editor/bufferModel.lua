@@ -75,7 +75,7 @@ local function new(
     plaintext()
   end
 
-  return {
+  local self = {
     name = name or 'untitled',
     content = _content,
     content_type = ct,
@@ -88,6 +88,9 @@ local function new(
     selection = sel,
     readonly = readonly
   }
+  local id = tostring(self):gsub('table: ', '')
+  self.id = id
+  return self
 end
 
 --- @param self BufferModel
@@ -95,7 +98,7 @@ local function lateinit(self)
   self:analyze()
 end
 
---- @class BufferModel
+--- @class BufferModel : Object
 --- @field name string
 --- @field content Dequeue -- Content
 --- @field content_type ContentType
@@ -116,6 +119,10 @@ end
 --- @field replace_selected_text function
 --- @field get_text_content function
 BufferModel = class.create(new, lateinit)
+
+function BufferModel:get_id()
+  return self.id
+end
 
 function BufferModel:analyze()
   if self.content_type ~= 'lua' then return end
