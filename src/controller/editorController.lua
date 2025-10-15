@@ -34,27 +34,11 @@ end
 --- @field view EditorView?
 --- @field state EditorState?
 --- @field mode EditorMode
----
---- @field open function
---- @field get_state function
---- @field set_state function
---- @field save_state function
---- @field restore_state function
---- @field get_clipboard function
---- @field set_clipboard function
---- @field set_mode function
---- @field get_mode function
---- @field close function
---- @field get_active_buffer function
---- @field get_input function
---- @field update_status function
---- @field textinput function
---- @field keypressed function
 EditorController = class.create(new)
 
 
 --- @param name string
---- @param content string?
+--- @param content str?
 --- @param save function
 function EditorController:open(name, content, save)
   local w = self.model.cfg.view.drawableChars
@@ -86,7 +70,7 @@ function EditorController:open(name, content, save)
 
   local b = BufferModel(name, content, save, ch, hl, pp)
   self.model.buffers:push_front(b)
-  self.view.buffer:open(b)
+  self.view:open(b)
   self:update_status()
   self:set_state()
 end
@@ -122,7 +106,9 @@ function EditorController:pop_buffer()
   if n_buffers < 2 then return end
   bs:pop_front()
   local b = bs:first()
-  self.view.buffer:open(b)
+  self.view:get_current_buffer():open(b)
+end
+
 end
 
 --- @param m EditorMode
@@ -138,10 +124,12 @@ function EditorController:set_mode(mode)
     self:save_state()
   end
   local init_search = function()
-    self:save_state()
     local db = buf.semantic
-    local ds = db.definitions
-    self.search:load(ds)
+    if db then
+      self:save_state()
+      local ds = db.definitions
+      self.search:load(ds)
+    end
   end
 
   local current = self.mode
@@ -150,7 +138,6 @@ function EditorController:set_mode(mode)
       set_reorg()
     end
     if mode == 'search' then
-      if not buf.semantic then return end
       init_search()
     end
     self.mode = mode
@@ -186,8 +173,9 @@ end
 
 --- @param clipboard string?
 function EditorController:set_state(clipboard)
-  local buf_view_state = self.view.buffer:get_state()
   local buf = self:get_active_buffer()
+  local bid = buf:get_id()
+  local buf_view_state = self.view:get_buffer(bid):get_state()
   if self.state then
     self.state.buffer = buf_view_state
     self.state.moved = buf:get_selection()
@@ -217,7 +205,7 @@ function EditorController:restore_state(state)
     local sel = state.buffer.selection
     local off = state.buffer.offset
     buf:set_selection(sel)
-    self.view.buffer:scroll_to(off)
+    self.view:get_current_buffer():scroll_to(off)
     local clip = state.clipboard
     if string.is_non_empty_string(clip) then
       love.system.setClipboardText(clip or '')
@@ -239,6 +227,12 @@ function EditorController:get_active_buffer()
   return self.model.buffers:first()
 end
 
+--- @return Id
+function EditorController:get_active_buffer_id()
+  local buf = self:get_active_buffer()
+  return buf:get_id()
+end
+
 --- @private
 --- @param sel integer
 --- @return CustomStatus
@@ -246,7 +240,7 @@ function EditorController:_generate_status(sel)
   --- @type BufferModel
   local buffer = self:get_active_buffer()
   local len = buffer:get_content_length() + 1
-  local bufview = self.view.buffer
+  local bufview = self.view:get_buffer(buffer:get_id())
   local more = bufview.content:get_more()
   local cs
   local m = self.mode
@@ -356,7 +350,7 @@ function EditorController:_move_sel(dir, by, warp, moved)
   local m = buf:move_selection(dir, by, warp, mv)
   if m then
     if mv then self.view:refresh(moved) end
-    self.view.buffer:follow_selection()
+    self.view:get_current_buffer():follow_selection()
     self:update_status()
   end
 end
@@ -366,7 +360,7 @@ end
 --- @param warp boolean?
 --- @param by integer?
 function EditorController:_scroll(dir, warp, by)
-  self.view.buffer:scroll(dir, by, warp)
+  self.view:get_current_buffer():scroll(dir, by, warp)
   self:update_status()
 end
 
@@ -451,7 +445,7 @@ function EditorController:_search_mode_keys(k)
     local bn = jump.block
     local ln = jump.line - 1
     buf:set_selection(bn)
-    self.view.buffer:scroll_to_line(ln)
+    self.view:get_current_buffer():scroll_to_line(ln)
     self:set_mode('edit')
     self.search:clear()
   end
@@ -556,7 +550,7 @@ function EditorController:_normal_mode_keys(k)
   --- handlers
   local function submit()
     if not Key.ctrl() and not Key.shift() and Key.is_enter(k) then
-      local bufv = self.view.buffer
+      local bufv = self.view:get_current_buffer()
       local function go(newtext)
         if bufv:is_selection_visible() then
           if buf:loaded_is_sel(true) then
@@ -695,7 +689,7 @@ function EditorController:keypressed(k)
 
   if love.debug then
     local buf = self:get_active_buffer()
-    local bufview = self.view.buffer
+    local bufview = self.view:get_buffer(buf:get_id())
     if k == 'f5' then
       if Key.ctrl() then buf:rechunk() end
       bufview:refresh()
