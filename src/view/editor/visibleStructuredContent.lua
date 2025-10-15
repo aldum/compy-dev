@@ -10,7 +10,7 @@ require("util.range")
 --- @field overscroll_max integer
 --- @field size_max integer
 --- @field range Range?
---- @field blocks Dequeue<VisibleBlock>
+--- @field v_blocks Dequeue<VisibleBlock>
 --- @field reverse_map ReverseMap
 ---
 --- @field set_range fun(self, Range)
@@ -93,12 +93,12 @@ function VisibleStructuredContent:load_blocks(blocks)
   WrappedText._init(self, self.w, fulltext)
   self:_init()
   self.reverse_map = revmap
-  self.blocks = visible_blocks
+  self.v_blocks = visible_blocks
 end
 
 function VisibleStructuredContent:recalc_range()
   local ln, aln = 1, 1
-  for _, v in ipairs(self.blocks) do
+  for _, v in ipairs(self.v_blocks) do
     local l = #(v.wrapped.orig)
     local al = #(v.wrapped.text)
     v.pos = Range(ln, ln + l - 1)
@@ -168,7 +168,7 @@ function VisibleStructuredContent:get_visible_blocks()
   local si = self.wrap_reverse[self.range.start]
   local ei = self.wrap_reverse[self.range.fin]
   local sbi, sei = self.reverse_map[si], self.reverse_map[ei]
-  return table.slice(self.blocks, sbi, sei)
+  return table.slice(self.v_blocks, sbi, sei)
 end
 
 --- @return integer
@@ -179,22 +179,22 @@ end
 --- @param bn integer
 --- @return Range?
 function VisibleStructuredContent:get_block_pos(bn)
-  local cl = #(self.blocks)
+  local cl = #(self.v_blocks)
   if bn > 0 and bn <= cl then
-    return self.blocks[bn].pos
+    return self.v_blocks[bn].pos
   elseif cl == 0 then --- empty/new file
     Range.singleton(1)
   elseif bn == cl + 1 then
-    return Range.singleton(self.blocks[cl].pos.fin + 1)
+    return Range.singleton(self.v_blocks[cl].pos.fin + 1)
   end
 end
 
 --- @param bn integer
 --- @return Range?
 function VisibleStructuredContent:get_block_app_pos(bn)
-  local cl = #(self.blocks)
+  local cl = #(self.v_blocks)
   if bn > 0 and bn <= cl then
-    return self.blocks[bn].app_pos
+    return self.v_blocks[bn].app_pos
   elseif bn == cl + 1 then
     local wr = self.wrap_reverse
     return Range.singleton(#wr)
