@@ -30,6 +30,7 @@ end
 --- @field content_type ContentType
 --- @field buffers Dequeue<BufferModel>
 ---
+--- @field cfg ViewConfig
 --- @field LINES integer
 --- @field SCROLL_BY integer
 --- @field w integer
