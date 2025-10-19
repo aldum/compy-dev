@@ -32,7 +32,8 @@ end
 --- @param save function
 --- @param chunker Chunker?
 --- @param highlighter Highlighter?
---- @param printer function?
+--- @param printer Printer?
+--- @param truncer function?
 --- @return BufferModel?
 local function new(
     name,
@@ -40,7 +41,8 @@ local function new(
     save,
     chunker,
     highlighter,
-    printer)
+    printer,
+    truncer)
   local _content, sel, ct, semantic
   local readonly = false
 
@@ -83,6 +85,7 @@ local function new(
     chunker = chunker,
     highlighter = highlighter,
     printer = printer,
+    truncer = truncer,
     revmap = {},
     semantic = semantic,
     selection = sel,
@@ -112,6 +115,7 @@ end
 --- @field chunker Chunker
 --- @field highlighter Highlighter
 --- @field printer Printer
+--- @field truncer function
 --- @field move_selection function
 --- @field get_selection function
 --- @field get_selected_text function

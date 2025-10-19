@@ -44,7 +44,7 @@ function EditorController:open(name, content, save)
   local w = self.model.cfg.view.drawableChars
   local is_lua = string.match(name, '.lua$')
   local is_md = string.match(name, '.md$')
-  local ch, hl, pp
+  local ch, hl, pp, tr
 
   if is_lua then
     self.input:set_eval(LuaEditorEval)
@@ -60,6 +60,9 @@ function EditorController:open(name, content, save)
     pp = function(t)
       return parser.pprint(t, w)
     end
+    tr = function(code)
+      return parser.trunc(code, self.model.cfg.view.fold_lines)
+    end
   elseif is_md then
     local mdEval = MdEval(name)
     hl = mdEval.highlighter
@@ -68,7 +71,7 @@ function EditorController:open(name, content, save)
     self.input:set_eval(TextEval)
   end
 
-  local b = BufferModel(name, content, save, ch, hl, pp)
+  local b = BufferModel(name, content, save, ch, hl, pp, tr)
   self.model.buffers:push_front(b)
   self.view:open(b)
   self:update_status()
