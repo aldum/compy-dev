@@ -522,7 +522,7 @@ Log = {
   once = once,
 
   fire_once = function()
-    if not love.DEBUG then return end
+    if not love or not love.DEBUG then return end
     love.debug.once = love.debug.once + 1
   end,
   --- @param color integer
