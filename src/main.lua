@@ -345,7 +345,6 @@ function love.load()
   redirect_to(CM)
   local CC = ConsoleController(CM, ctrl)
   local CV = ConsoleView(baseconf, CC)
-  CC:set_view(CV)
 
   ctrl.init(CC, mode)
   ctrl.setup_callback_handlers(CC)

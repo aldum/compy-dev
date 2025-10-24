@@ -36,6 +36,11 @@ end
 --- @field mode EditorMode
 EditorController = class.create(new)
 
+--- @param v EditorView
+function EditorController:init_view(v)
+  self.view = v
+  self.input:init_view(self.view.input)
+end
 
 --- @param name string
 --- @param content str?

@@ -15,9 +15,15 @@ end
 
 --- @class UserInputController
 --- @field model UserInputModel
+--- @field view UserInputView?
 --- @field result table
 --- @field disable_selection boolean
 UserInputController = class.create(new)
+
+--- @param v UserInputView
+function UserInputController:init_view(v)
+  self.view = v
+end
 
 ---------------
 --  entered  --

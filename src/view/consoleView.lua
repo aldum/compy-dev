@@ -13,7 +13,7 @@ local gfx = love.graphics
 --- @param cfg Config
 --- @param ctrl ConsoleController
 local function new(cfg, ctrl)
-  return {
+  local self = {
     title = TitleView,
     canvas = CanvasView(cfg.view),
     input = UserInputView(cfg.view, ctrl.input),
@@ -22,6 +22,9 @@ local function new(cfg, ctrl)
     cfg = cfg,
     drawable_height = ViewUtils.get_drawable_height(cfg.view),
   }
+  --- hook the view in the controller
+  ctrl:init_view(self)
+  return self
 end
 
 --- @class ConsoleView
