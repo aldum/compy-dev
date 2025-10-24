@@ -8,11 +8,17 @@ require("util.view")
 --- @param cfg ViewConfig
 --- @param ctrl UserInputController
 local new = function(cfg, ctrl)
+  local gfx = love.graphics
+  local w = gfx.getWidth()
+  --- max lines + statusline
+  local h = cfg.input_max * cfg.fh + cfg.fh
   return {
     cfg = cfg,
     controller = ctrl,
     statusline = Statusline(cfg),
     oneshot = ctrl.model.oneshot,
+    start_h = h,
+    canvas = gfx.newCanvas(w, h),
   }
 end
 
@@ -20,6 +26,7 @@ end
 --- @field controller UserInputController
 --- @field statusline table
 --- @field oneshot boolean
+--- @field canvas love.Canvas
 UserInputView = class.create(new)
 
 local get_colors = function(cf_colors)
@@ -60,17 +67,16 @@ local calc_overflow = function(w, text, cursor)
 end
 
 --- @param input InputDTO
-function UserInputView:draw_input(input)
+--- @param status Status
+function UserInputView:render_input(input, status)
   local gfx = love.graphics
-
   local cfg = self.cfg
-  local status = self.controller:get_status()
   local cf_colors = cfg.colors
   local colors = get_colors(cf_colors)
 
   local fh = cfg.fh
   local fw = cfg.fw
-  local h = cfg.h
+  local h = 0
   local drawableWidth = cfg.drawableWidth
   local w = cfg.drawableChars
   -- drawtest hack
@@ -81,9 +87,6 @@ function UserInputView:draw_input(input)
   local cursorInfo = self.controller:get_cursor_info()
   local cl, cc = cursorInfo.cursor.l, cursorInfo.cursor.c
   local acc = cc - 1
-  --- overflow binary and actual height (in lines)
-  local overflow = 0
-  local of_h = 0
 
   local text = input.text
   local vc = input.visible
@@ -97,12 +100,14 @@ function UserInputView:draw_input(input)
   local apparentLines = inLines + overflow
   local inHeight = inLines * fh
   local apparentHeight = inHeight
-  local y = h - (#text * fh)
+  local y = fh
 
   local wrap_forward = vc.wrap_forward
   local wrap_reverse = vc.wrap_reverse
 
   local start_y = h - apparentLines * fh
+  local vpH = gfx.getHeight()
+  self.start_h = vpH - (inLines + 1) * fh
 
   local function drawCursor()
     local y_offset = math.floor(acc / w)
@@ -125,7 +130,7 @@ function UserInputView:draw_input(input)
     gfx.setColor(colors.bg)
     gfx.rectangle("fill",
       0,
-      start_y,
+      0,
       drawableWidth,
       apparentHeight * fh)
   end
@@ -134,8 +139,8 @@ function UserInputView:draw_input(input)
   local visible = vc:get_visible()
   gfx.setFont(self.cfg.font)
   drawBackground()
-  local sl_y = start_y - fh
-  self.statusline:draw(status, sl_y)
+
+  self.statusline:draw(status, 0)
 
   if highlight then
     local hl = highlight.hl
@@ -275,39 +280,58 @@ function UserInputView:draw_input(input)
   drawCursor()
 end
 
+--- @param err_text string[]
+function UserInputView:render_error(err_text)
+  local colors = self.cfg.colors
+  local fh = self.cfg.fh
+  local h = self.start_h
+  local drawableWidth = self.cfg.drawableWidth
+  local inLines = #err_text
+  local inHeight = inLines * fh
+  local apparentHeight = #err_text
+  local start_y = h - inHeight
+
+  local drawBackground = function()
+    gfx.setColor(colors.input.error_bg)
+    gfx.rectangle("fill",
+      0,
+      start_y,
+      drawableWidth,
+      apparentHeight * fh)
+  end
+
+  drawBackground()
+
+  gfx.setColor(colors.input.error)
+
+  for l, str in ipairs(err_text) do
+    local breaks = 0 -- starting height is already calculated
+    ViewUtils.write_line(l, str, start_y, breaks, self.cfg)
+  end
+end
+
 --- @param input InputDTO
-function UserInputView:draw(input)
+--- @param status Status
+function UserInputView:render(input, status)
+  local gfx = love.graphics
+  --- @diagnostic disable-next-line: undefined-field
+  if gfx.mock then return end
   local err_text = input.wrapped_error or {}
   local isError = string.is_non_empty_string_array(err_text)
 
-  local colors = self.cfg.colors
-  local fh = self.cfg.fh
-  local h = self.cfg.h
-
+  gfx.setCanvas(self.canvas)
   if isError then
-    local drawableWidth = self.cfg.drawableWidth
-    local inLines = #err_text
-    local inHeight = inLines * fh
-    local apparentHeight = #err_text
-    local start_y = h - inHeight
-    local drawBackground = function()
-      gfx.setColor(colors.input.error_bg)
-      gfx.rectangle("fill",
-        0,
-        start_y,
-        drawableWidth,
-        apparentHeight * fh)
-    end
-
-    drawBackground()
-    gfx.setColor(colors.input.error)
-    for l, str in ipairs(err_text) do
-      local breaks = 0 -- starting height is already calculated
-      ViewUtils.write_line(l, str, start_y, breaks, self.cfg)
-    end
+    self:render_error(err_text)
   else
-    self:draw_input(input)
+    self:render_input(input, status)
   end
+  gfx.setCanvas()
+end
+
+--- Draw the pre-rendered canvas to screen
+function UserInputView:draw()
+  local h = self.start_h
+  love.graphics.draw(self.canvas, 0, h)
 end
 
 --- Whether the cursor is at limit, accounting for word wrap.
