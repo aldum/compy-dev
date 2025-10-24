@@ -112,6 +112,16 @@ function EditorController:pop_buffer()
   self.view:get_current_buffer():open(b)
 end
 
+function EditorController:close_buffer()
+  local bs = self.model.buffers
+  local n_buffers = bs:length()
+  if n_buffers < 2 then
+    self.console:finish_edit()
+  else
+    self:pop_buffer()
+  end
+end
+
 --- @param m EditorMode
 --- @return boolean
 local function is_normal(m)

@@ -670,14 +670,22 @@ function ConsoleController:edit(name, state)
   if ex then
     text = self:_readfile(filename)
   end
-  love.state.prev_state = love.state.app_state
-  love.state.app_state = 'editor'
+
+  if love.state.app_state ~= 'editor' then
+    love.state.prev_state = love.state.app_state
+    love.state.app_state = 'editor'
+  end
   local save = function(newcontent)
     return self:_writefile(filename, newcontent)
   end
 
   self.editor:open(filename, text, save)
   self.editor:restore_state(state)
+end
+
+--- @return EditorState?
+function ConsoleController:close_buffer()
+  self.editor:close_buffer()
 end
 
 --- @return EditorState?
