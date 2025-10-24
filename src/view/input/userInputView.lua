@@ -32,6 +32,33 @@ local get_colors = function(cf_colors)
   end
 end
 
+--- The Overflow
+--- When the cursor is on the last character of the line
+--- we display it at the start of the next line as that's
+--- where newly added text will appear
+--- However, when the line also happens to be wrap-length,
+--- there either is no next line yet, or it would look the
+--- same as if it was at the start of the next.
+--- Hence, the overflow phantom line.
+local calc_overflow = function(w, text, cursor)
+  local cl, cc = cursor.l, cursor.c
+  local acc = cc - 1
+  --- overflow binary and actual height (in lines)
+  local overflow = 0
+  local of_h = 0
+  local curline = text[cl]
+  local clen = string.ulen(curline)
+  local q, rem = math.modf(acc / w)
+  local ofpos = rem == 0 and acc == clen and clen > 0
+  if ofpos
+      and string.is_non_empty_string_array(text)
+  then
+    overflow = 1
+    of_h = q
+  end
+  return overflow, of_h, ofpos
+end
+
 --- @param input InputDTO
 function UserInputView:draw_input(input)
   local gfx = love.graphics
@@ -64,24 +91,8 @@ function UserInputView:draw_input(input)
     vc:get_content_length(),
     cfg.input_max)
 
-  --- The Overflow
-  --- When the cursor is on the last character of the line
-  --- we display it at the start of the next line as that's
-  --- where newly added text will appear
-  --- However, when the line also happens to be wrap-length,
-  --- there either is no next line yet, or it would look the
-  --- same as if it was at the start of the next.
-  --- Hence, the overflow phantom line.
-  local curline = text[cl]
-  local clen = string.ulen(curline)
-  local q, rem = math.modf(acc / w)
-  local ofpos = rem == 0 and acc == clen and clen > 0
-  if ofpos
-      and string.is_non_empty_string_array(text)
-  then
-    overflow = 1
-    of_h = q
-  end
+  local overflow, of_h, ofpos = calc_overflow(
+    w, text, cursorInfo.cursor)
 
   local apparentLines = inLines + overflow
   local inHeight = inLines * fh
