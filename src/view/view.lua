@@ -14,8 +14,7 @@ View = {
     gfx.push('all')
     local terminal = C:get_terminal()
     local canvas = C:get_canvas()
-    local input = C.input:get_input()
-    CV:draw(terminal, canvas, input, View.snapshot)
+    CV:draw(terminal, canvas, View.snapshot)
     gfx.pop()
   end,
 
@@ -37,9 +36,12 @@ View = {
       x = gfx.getWidth() - 10 - w
     end
     gfx.push('all')
+    local prevCanvas = gfx.getCanvas()
+    gfx.setCanvas()
     gfx.setColor(Color[Color.yellow])
     gfx.setFont(FPSfont)
     gfx.print(fps, x, 10)
+    gfx.setCanvas(prevCanvas)
     gfx.pop()
   end
 }

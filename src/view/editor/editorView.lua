@@ -40,8 +40,7 @@ function EditorView:draw()
       bv:draw(spec)
     end
     if ViewUtils.conditional_draw('show_input') then
-      local input = ctrl:get_input()
-      self.input:draw(input)
+      self.input:draw()
     end
   end
 end
@@ -77,4 +76,12 @@ end
 --- @param moved integer?
 function EditorView:refresh(moved)
   self:get_current_buffer():refresh(moved)
+  self:update_input()
+end
+
+function EditorView:update_input()
+  local ctrl = self.controller
+  local input = ctrl:get_input()
+  local status = ctrl.input:get_status()
+  self.input:render(input, status)
 end

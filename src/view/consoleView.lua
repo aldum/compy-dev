@@ -39,9 +39,8 @@ ConsoleView = class.create(new)
 
 --- @param terminal table
 --- @param canvas love.Canvas
---- @param input InputDTO
 --- @param snapshot love.Image?
-function ConsoleView:draw(terminal, canvas, input, snapshot)
+function ConsoleView:draw(terminal, canvas, snapshot)
   if love.DEBUG then
     self:draw_placeholder()
   end
@@ -53,7 +52,7 @@ function ConsoleView:draw(terminal, canvas, input, snapshot)
       self.drawable_height, snapshot)
 
     if ViewUtils.conditional_draw('show_input') then
-      self.input:draw(input)
+      self.input:draw()
     end
   end
 

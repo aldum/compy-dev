@@ -25,6 +25,12 @@ function UserInputController:init_view(v)
   self.view = v
 end
 
+function UserInputController:update_view()
+  local input = self.model:get_input()
+  local status = self:get_status()
+  self.view:render(input, status)
+end
+
 ---------------
 --  entered  --
 ---------------
@@ -42,6 +48,7 @@ end
 --- @param t str
 function UserInputController:set_text(t)
   self.model:set_text(t)
+  self:update_view()
 end
 
 --- @return boolean
@@ -132,6 +139,7 @@ end
 --- @return boolean
 --- @return Error[]
 function UserInputController:evaluate()
+  self:update_view()
   return self.model:handle(true)
 end
 
@@ -170,6 +178,7 @@ end
 --- @param k string
 --- @return boolean? limit
 function UserInputController:keypressed(k)
+  self:update_view()
   if _G.web and k == 'space' then
     self:textinput(' ')
   end
@@ -368,7 +377,7 @@ function UserInputController:keypressed(k)
     submit()
   end
 
-
+  self:update_view()
   return ret
 end
 
@@ -381,6 +390,7 @@ function UserInputController:textinput(t)
     return
   end
   self.model:add_text(t)
+  self:update_view()
 end
 
 --- @param k string
@@ -401,6 +411,7 @@ function UserInputController:keyreleased(k)
   end
 
   selection()
+  self:update_view()
 end
 
 ---------------

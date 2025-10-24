@@ -81,6 +81,7 @@ function EditorController:open(name, content, save)
   self.view:open(b)
   self:update_status()
   self:set_state()
+  self.input:update_view()
 end
 
 --- @private
@@ -284,6 +285,7 @@ end
 
 --- @param t string
 function EditorController:textinput(t)
+  self.view:update_input()
   if self.mode == 'edit' then
     local input = self.model.input
     if input:has_error() then
@@ -689,6 +691,7 @@ end
 
 --- @param k string
 function EditorController:keypressed(k)
+  self.input:update_view()
   local mode = self.mode
 
   if Key.ctrl() then
