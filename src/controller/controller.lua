@@ -812,6 +812,8 @@ Controller = {
   report = function()
     if not love.PROFILE then return end
     local report = Prof.report()
-    Log.debug(report)
+    if report then
+      Log.debug(report)
+    end
   end,
 }

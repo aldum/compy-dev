@@ -1,5 +1,4 @@
 if not love.profiler then
-  Log.debug('profreq')
   love.profiler = require('lib.profile')
 end
 
