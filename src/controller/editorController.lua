@@ -116,8 +116,10 @@ function EditorController:close_buffer()
   local bs = self.model.buffers
   local n_buffers = bs:length()
   if n_buffers < 2 then
+    -- Log.debug('fin', n_buffers)
     self.console:finish_edit()
   else
+    -- Log.debug(':bd', n_buffers)
     self:pop_buffer()
   end
 end
@@ -184,6 +186,7 @@ end
 
 --- @param clipboard string?
 function EditorController:set_state(clipboard)
+  --- TODO: multibuffer support
   local buf = self:get_active_buffer()
   local bid = buf:get_id()
   local buf_view_state = self.view:get_buffer(bid):get_state()
@@ -206,11 +209,13 @@ function EditorController:get_state()
 end
 
 function EditorController:save_state()
+  --- TODO: multibuffer support
   self:set_state(love.system.getClipboardText())
 end
 
 --- @param state EditorState?
 function EditorController:restore_state(state)
+  --- TODO: multibuffer support
   if state then
     local buf = self:get_active_buffer()
     local sel = state.buffer.selection
@@ -653,7 +658,7 @@ function EditorController:_normal_mode_keys(k)
     end
 
     -- step into
-    if Key.ctrl() then
+    if love.DEBUG and Key.ctrl() then
       if k == "o" then
         self:follow_require()
       end

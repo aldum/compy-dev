@@ -684,6 +684,7 @@ function ConsoleController:finish_edit()
   if ok then
     love.state.app_state = love.state.prev_state
     love.state.prev_state = nil
+    --- TODO clear bufferlist
     return self.editor:get_state()
   else
     print(err)
