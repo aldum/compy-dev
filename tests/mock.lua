@@ -20,12 +20,21 @@ local mods = {
   M = 'lalt',
 }
 
+local W = 1024
+local H = 600
+
 --- @param t love
 local function mock_love(t)
   local love = {
     keyboard = {
       isDown = function(k) return held[k] end
-    }
+    },
+    graphics = {
+      getWidth = function() return W end,
+      getHeight = function() return H end,
+      getDimensions = function() return W, H end,
+      newCanvas = function() end,
+    },
   }
   for k, v in pairs(t) do
     love[k] = v

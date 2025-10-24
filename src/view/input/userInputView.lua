@@ -8,11 +8,16 @@ require("util.view")
 --- @param cfg ViewConfig
 --- @param ctrl UserInputController
 local new = function(cfg, ctrl)
+  local gfx = love.graphics
+  local w = gfx.getWidth()
+  local h = cfg.input_max * cfg.fh
   return {
     cfg = cfg,
     controller = ctrl,
     statusline = Statusline(cfg),
     oneshot = ctrl.model.oneshot,
+    start_h = h,
+    canvas = gfx.newCanvas(w, h),
   }
 end
 
@@ -20,10 +25,12 @@ end
 --- @field controller UserInputController
 --- @field statusline table
 --- @field oneshot boolean
+--- @field start_h number
+--- @field canvas love.Canvas
 UserInputView = class.create(new)
 
 --- @param input InputDTO
-function UserInputView:draw_input(input)
+function UserInputView:render_input(input)
   local gfx = love.graphics
 
   local cfg = self.cfg
@@ -41,7 +48,7 @@ function UserInputView:draw_input(input)
 
   local fh = cfg.fh
   local fw = cfg.fw
-  local h = cfg.h
+  local h = cfg.h - self.start_h
   local drawableWidth = cfg.drawableWidth
   local w = cfg.drawableChars
   -- drawtest hack
@@ -121,7 +128,8 @@ function UserInputView:draw_input(input)
   local visible = vc:get_visible()
   gfx.setFont(self.cfg.font)
   drawBackground()
-  self.statusline:draw(status, apparentLines)
+  local sl_y = start_y + cfg.fh
+  self.statusline:draw(status, apparentLines, sl_y)
 
   if highlight then
     local hl = highlight.hl
@@ -262,14 +270,16 @@ function UserInputView:draw_input(input)
 end
 
 --- @param input InputDTO
-function UserInputView:draw(input)
+function UserInputView:render(input)
+  local gfx = love.graphics
   local err_text = input.wrapped_error or {}
   local isError = string.is_non_empty_string_array(err_text)
 
   local colors = self.cfg.colors
   local fh = self.cfg.fh
-  local h = self.cfg.h
+  local h = self.start_h
 
+  gfx.setCanvas(self.canvas)
   if isError then
     local drawableWidth = self.cfg.drawableWidth
     local inLines = #err_text
@@ -292,8 +302,13 @@ function UserInputView:draw(input)
       ViewUtils.write_line(l, str, start_y, breaks, self.cfg)
     end
   else
-    self:draw_input(input)
+    self:render_input(input)
   end
+  gfx.setCanvas()
+end
+
+function UserInputView:draw()
+  love.graphics.draw(self.canvas, 0, self.start_h)
 end
 
 --- Whether the cursor is at limit, accounting for word wrap.
