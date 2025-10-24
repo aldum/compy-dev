@@ -16,7 +16,7 @@ local function new(cfg, ctrl)
     search = SearchView(cfg, ctrl.search),
   }
   --- hook the view in the controller
-  ctrl.view = ev
+  ctrl:init_view(ev)
   return ev
 end
 
