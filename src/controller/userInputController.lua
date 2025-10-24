@@ -15,9 +15,22 @@ end
 
 --- @class UserInputController
 --- @field model UserInputModel
+--- @field view UserInputView?
 --- @field result table
 --- @field disable_selection boolean
 UserInputController = class.create(new)
+
+--- @param v UserInputView
+function UserInputController:init_view(v)
+  self.view = v
+  self:update_view()
+end
+
+function UserInputController:update_view()
+  local input = self.model:get_input()
+  local status = self:get_status()
+  self.view:render(input, status)
+end
 
 ---------------
 --  entered  --
@@ -36,6 +49,7 @@ end
 --- @param t str
 function UserInputController:set_text(t)
   self.model:set_text(t)
+  self:update_view()
 end
 
 --- @return boolean
@@ -126,7 +140,9 @@ end
 --- @return boolean
 --- @return Error[]
 function UserInputController:evaluate()
-  return self.model:handle(true)
+    local ok, res = self.model:handle(true)
+    self:update_view()
+  return ok, res
 end
 
 function UserInputController:cancel()
@@ -362,7 +378,7 @@ function UserInputController:keypressed(k)
     submit()
   end
 
-
+  self:update_view()
   return ret
 end
 
@@ -375,6 +391,7 @@ function UserInputController:textinput(t)
     return
   end
   self.model:add_text(t)
+  self:update_view()
 end
 
 --- @param k string
@@ -395,12 +412,14 @@ function UserInputController:keyreleased(k)
   end
 
   selection()
+  self:update_view()
 end
 
 ---------------
 --   mouse   --
 ---------------
 
+--- @private
 --- @param x integer
 --- @param y integer
 --- @return integer c
@@ -417,6 +436,7 @@ function UserInputController:_translate_to_input_grid(x, y)
   return char, line
 end
 
+--- @private
 --- @param x integer
 --- @param y integer
 --- @param btn integer

@@ -10,13 +10,14 @@ require("util.view")
 local new = function(cfg, ctrl)
   local gfx = love.graphics
   local w = gfx.getWidth()
-  local h = cfg.input_max * cfg.fh
+  --- max lines + statusline
+  local h = cfg.input_max * cfg.fh + cfg.fh
   return {
     cfg = cfg,
     controller = ctrl,
     statusline = Statusline(cfg),
     oneshot = ctrl.model.oneshot,
-    start_h = h,
+    start_h = nil,
     canvas = gfx.newCanvas(w, h),
   }
 end
@@ -25,58 +26,33 @@ end
 --- @field controller UserInputController
 --- @field statusline table
 --- @field oneshot boolean
---- @field start_h number
 --- @field canvas love.Canvas
 UserInputView = class.create(new)
 
---- @param input InputDTO
-function UserInputView:render_input(input)
-  local gfx = love.graphics
-
-  local cfg = self.cfg
-  local status = self.controller:get_status()
-  local cf_colors = cfg.colors
-  local colors = (function()
-    if love.state.app_state == 'inspect' then
-      return cf_colors.input.inspect
-    elseif love.state.app_state == 'running' then
-      return cf_colors.input.user
-    else
-      return cf_colors.input.console
-    end
-  end)()
-
-  local fh = cfg.fh
-  local fw = cfg.fw
-  local h = cfg.h - self.start_h
-  local drawableWidth = cfg.drawableWidth
-  local w = cfg.drawableChars
-  -- drawtest hack
-  if drawableWidth < gfx.getWidth() / 3 then
-    w = w * 2
+local get_colors = function(cf_colors)
+  if love.state.app_state == 'inspect' then
+    return cf_colors.input.inspect
+  elseif love.state.app_state == 'running' then
+    return cf_colors.input.user
+  else
+    return cf_colors.input.console
   end
+end
 
-  local cursorInfo = self.controller:get_cursor_info()
-  local cl, cc = cursorInfo.cursor.l, cursorInfo.cursor.c
+--- The Overflow
+--- When the cursor is on the last character of the line
+--- we display it at the start of the next line as that's
+--- where newly added text will appear
+--- However, when the line also happens to be wrap-length,
+--- there either is no next line yet, or it would look the
+--- same as if it was at the start of the next.
+--- Hence, the overflow phantom line.
+local calc_overflow = function(w, text, cursor)
+  local cl, cc = cursor.l, cursor.c
   local acc = cc - 1
   --- overflow binary and actual height (in lines)
   local overflow = 0
   local of_h = 0
-
-  local text = input.text
-  local vc = input.visible
-  local inLines = math.min(
-    vc:get_content_length(),
-    cfg.input_max)
-
-  --- The Overflow
-  --- When the cursor is on the last character of the line
-  --- we display it at the start of the next line as that's
-  --- where newly added text will appear
-  --- However, when the line also happens to be wrap-length,
-  --- there either is no next line yet, or it would look the
-  --- same as if it was at the start of the next.
-  --- Hence, the overflow phantom line.
   local curline = text[cl]
   local clen = string.ulen(curline)
   local q, rem = math.modf(acc / w)
@@ -87,16 +63,51 @@ function UserInputView:render_input(input)
     overflow = 1
     of_h = q
   end
+  return overflow, of_h, ofpos
+end
+
+--- @param input InputDTO
+--- @param status Status
+function UserInputView:render_input(input, status)
+  local gfx = love.graphics
+  local cfg = self.cfg
+  local cf_colors = cfg.colors
+  local colors = get_colors(cf_colors)
+
+  local fh = cfg.fh
+  local fw = cfg.fw
+  local h = 0
+  local drawableWidth = cfg.drawableWidth
+  local w = cfg.drawableChars
+  -- drawtest hack
+  if drawableWidth < gfx.getWidth() / 3 then
+    w = w * 2
+  end
+
+  local cursorInfo = self.controller:get_cursor_info()
+  local cl, cc = cursorInfo.cursor.l, cursorInfo.cursor.c
+  local acc = cc - 1
+
+  local text = input.text
+  local vc = input.visible
+  local inLines = math.min(
+    vc:get_content_length(),
+    cfg.input_max)
+
+  local overflow, of_h, ofpos = calc_overflow(
+    w, text, cursorInfo.cursor)
 
   local apparentLines = inLines + overflow
   local inHeight = inLines * fh
   local apparentHeight = inHeight
-  local y = h - (#text * fh)
+  local y = fh
 
   local wrap_forward = vc.wrap_forward
   local wrap_reverse = vc.wrap_reverse
 
   local start_y = h - apparentLines * fh
+  local vpH = gfx.getHeight()
+  self.start_h = vpH - (inLines + 1) * fh
 
   local function drawCursor()
     local y_offset = math.floor(acc / w)
@@ -119,7 +130,7 @@ function UserInputView:render_input(input)
     gfx.setColor(colors.bg)
     gfx.rectangle("fill",
       0,
-      start_y,
+      0,
       drawableWidth,
       apparentHeight * fh)
   end
@@ -128,8 +139,7 @@ function UserInputView:render_input(input)
   local visible = vc:get_visible()
   gfx.setFont(self.cfg.font)
   drawBackground()
-  local sl_y = start_y + cfg.fh
-  self.statusline:draw(status, apparentLines, sl_y)
+  self.statusline:draw(status, 0)
 
   if highlight then
     local hl = highlight.hl
@@ -269,46 +279,57 @@ function UserInputView:render_input(input)
   drawCursor()
 end
 
---- @param input InputDTO
-function UserInputView:render(input)
-  local gfx = love.graphics
-  local err_text = input.wrapped_error or {}
-  local isError = string.is_non_empty_string_array(err_text)
-
+function UserInputView:render_error(err_text)
   local colors = self.cfg.colors
   local fh = self.cfg.fh
   local h = self.start_h
+  local drawableWidth = self.cfg.drawableWidth
+  local inLines = #err_text
+  local inHeight = inLines * fh
+  local apparentHeight = #err_text
+  local start_y = h - inHeight
+
+  local drawBackground = function()
+    gfx.setColor(colors.input.error_bg)
+    gfx.rectangle("fill",
+      0,
+      start_y,
+      drawableWidth,
+      apparentHeight * fh)
+  end
+
+  drawBackground()
+
+  gfx.setColor(colors.input.error)
+
+  for l, str in ipairs(err_text) do
+    local breaks = 0 -- starting height is already calculated
+    ViewUtils.write_line(l, str, start_y, breaks, self.cfg)
+  end
+end
+
+--- @param input InputDTO
+--- @param status Status
+function UserInputView:render(input, status)
+  local gfx = love.graphics
+  --- @diagnostic disable-next-line: undefined-field
+  if gfx.mock then return end
+  local err_text = input.wrapped_error or {}
+  local isError = string.is_non_empty_string_array(err_text)
 
   gfx.setCanvas(self.canvas)
+  gfx.clear(0,0,0)
   if isError then
-    local drawableWidth = self.cfg.drawableWidth
-    local inLines = #err_text
-    local inHeight = inLines * fh
-    local apparentHeight = #err_text
-    local start_y = h - inHeight
-    local drawBackground = function()
-      gfx.setColor(colors.input.error_bg)
-      gfx.rectangle("fill",
-        0,
-        start_y,
-        drawableWidth,
-        apparentHeight * fh)
-    end
-
-    drawBackground()
-    gfx.setColor(colors.input.error)
-    for l, str in ipairs(err_text) do
-      local breaks = 0 -- starting height is already calculated
-      ViewUtils.write_line(l, str, start_y, breaks, self.cfg)
-    end
+    self:render_error(err_text)
   else
-    self:render_input(input)
+    self:render_input(input, status)
   end
   gfx.setCanvas()
 end
 
 function UserInputView:draw()
-  love.graphics.draw(self.canvas, 0, self.start_h)
+  local h = self.start_h
+  love.graphics.draw(self.canvas, 0, h)
 end
 
 --- Whether the cursor is at limit, accounting for word wrap.

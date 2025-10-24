@@ -30,10 +30,13 @@ local function mock_love(t)
       isDown = function(k) return held[k] end
     },
     graphics = {
+      mock = true,
       getWidth = function() return W end,
       getHeight = function() return H end,
       getDimensions = function() return W, H end,
       newCanvas = function() end,
+      setCanvas = function() end,
+      clear = function() end,
     },
   }
   for k, v in pairs(t) do
