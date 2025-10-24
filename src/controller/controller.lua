@@ -563,7 +563,7 @@ Controller = {
               if love.state.app_state == 'running' then
                 C:stop_project_run()
               elseif love.state.app_state == 'editor' then
-                C:finish_edit()
+                C:close_buffer()
               end
             end
             if k == "r" then
