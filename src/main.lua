@@ -157,8 +157,7 @@ local setup_storage = function(mode)
   else
     if OS.get_name() == 'Android' then
       if mode == 'play' then
-        local savedir = love.filesystem.getSaveDirectory()
-        FS.mkdirp(savedir)
+        --- initializing directory moved to app code
       else
         local ok, sd_path = android_storage_find()
         if not ok then
