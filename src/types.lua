@@ -133,7 +133,7 @@
 
 --- @class LoveState table
 --- @field testing boolean
---- @field has_removable boolean
+--- @field has_removable boolean?
 --- @field user_input UserInput?
 --- @field app_state AppState
 --- @field prev_state AppState?
