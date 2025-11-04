@@ -268,6 +268,12 @@ function love.load()
     love.profiler = require('lib.profile')
   end
 
+  --- @type LoveState
+  love.state = {
+    testing = false,
+    app_state = 'starting',
+  }
+
   if playback and not string.is_non_empty_string(startup.path) then
     exit(messages.play_no_project)
     return
@@ -297,13 +303,9 @@ function love.load()
     load_project(startup.path or '', paths)
   end
 
-  --- @type LoveState
-  love.state = {
-    testing = false,
-    has_removable = has_removable,
-    user_input = nil,
-    app_state = 'ready'
-  }
+  love.state.has_removable = has_removable
+  love.state.app_state = 'ready'
+
   if love.DEBUG then
     love.debug = {
       show_snapshot = true,
