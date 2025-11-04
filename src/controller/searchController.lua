@@ -129,6 +129,8 @@ function SearchController:keypressed(k)
   removers()
 
   if Key.is_enter(k) then
+    --- no linebreaks in search
+    if Key.shift() or Key.ctrl() then return end
     local sel = self.model.selection
     local r = self.model.resultset[sel].r
     return r
