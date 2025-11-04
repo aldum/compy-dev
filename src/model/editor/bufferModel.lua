@@ -339,6 +339,7 @@ function BufferModel:replace_selected_text(t)
       return false
     end
     local sel = self.selection
+    local rechunk = false
     --- content start and original length
     local cs, ol = (function()
       local current = self.content[sel]
@@ -368,6 +369,7 @@ function BufferModel:replace_selected_text(t)
         c.pos = nr
         self.content:insert(c, sel)
       end
+      rechunk = true
     end
     --- move subsequent chunks down
     local diff = chunks[n].pos:len() - ol
@@ -378,7 +380,7 @@ function BufferModel:replace_selected_text(t)
       end
     end
 
-    self:_text_change()
+    self:_text_change(rechunk)
     return true, n
   else
     local sel = self.selection
