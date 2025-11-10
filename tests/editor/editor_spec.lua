@@ -90,7 +90,6 @@ describe('Editor #editor', function()
       love.state.app_state = 'editor'
 
       local controller, press = wire(TU.mock_view_cfg(w))
-      local model = controller.model
 
       local save = TU.get_save_function(turtle_doc)
 
