@@ -20,6 +20,11 @@ end
 --- @field disable_selection boolean
 UserInputController = class.create(new)
 
+--- @return boolean
+function UserInputController:is_oneshot()
+  return self.model.oneshot
+end
+
 --- @param v UserInputView
 function UserInputController:init_view(v)
   self.view = v
