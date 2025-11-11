@@ -70,6 +70,7 @@ end
 function ConsoleController:init_view(V)
   self.view = V
   self.input:init_view(V.input)
+  self.input:update_view()
 end
 
 --- @param name string
@@ -431,6 +432,7 @@ function ConsoleController.prepare_project_env(cc)
     ui_con = UserInputController(ui_model, input_ref, true)
     local view = UserInputView(cfg.view, ui_con)
     ui_con:init_view(view)
+    ui_con:update_view()
 
     love.state.user_input = {
       M = ui_model, C = ui_con, V = view
@@ -834,11 +836,13 @@ function ConsoleController:keypressed(k)
       end
     end
   end
+  input:update_view()
 end
 
 --- @param k string
 function ConsoleController:keyreleased(k)
   self.input:keyreleased(k)
+  self.input:update_view()
 end
 
 --- @param x integer
