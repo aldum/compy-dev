@@ -301,6 +301,7 @@ function UserInputView:render_error(err_text)
       apparentHeight * fh)
   end
 
+  gfx.push('all')
   drawBackground()
 
   gfx.setColor(colors.input.error)
@@ -309,6 +310,7 @@ function UserInputView:render_error(err_text)
     local breaks = 0 -- starting height is already calculated
     ViewUtils.write_line(l, str, start_y, breaks, self.cfg)
   end
+  gfx.pop()
 end
 
 --- @param input InputDTO
