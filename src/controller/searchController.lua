@@ -3,16 +3,23 @@ local class = require('util.class')
 --- @param model Search
 --- @param uic UserInputController
 local function new(model, uic)
-  return {
+  local self = {
     model = model,
     input = uic,
   }
+  return self
 end
 
 --- @class SearchController
 --- @field model Search
 --- @field input UserInputController
 SearchController = class.create(new)
+
+--- @param v SearchView
+function SearchController:init_view(v)
+  self.view = v
+  self.input:init_view(self.view.input)
+end
 
 --- @param items table[]
 function SearchController:load(items)

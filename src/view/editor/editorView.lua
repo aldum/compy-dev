@@ -31,7 +31,7 @@ function EditorView:draw()
   local ctrl = self.controller
   local mode = ctrl:get_mode()
   if mode == 'search' then
-    self.search:draw(ctrl.search:get_input())
+    self.search:draw()
   else
     local spec = mode == 'reorder'
     local bv = self:get_current_buffer()
