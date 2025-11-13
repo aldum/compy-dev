@@ -460,7 +460,6 @@ function ConsoleController.prepare_project_env(cc)
       return
     end
     ui_model:set_text(content)
-    ui_con:update_view()
   end
 
   --- @param filters table
