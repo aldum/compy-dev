@@ -575,22 +575,32 @@ function ConsoleController:_set_base_env(t)
   table.protect(t)
 end
 
---- @param msg string?
-function ConsoleController:suspend_run(msg)
-  local runner_env = self:get_project_env()
-  if love.state.app_state ~= 'running' then
+function ConsoleController:suspend()
+  if love.state.app_state ~= 'snapshot' then
     return
   end
+  local runner_env = self:get_project_env()
   Log.info('Suspending project run')
   love.state.app_state = 'inspect'
+  local msg = love.state.suspend_msg
   if msg then
     self.input:set_error({ tostring(msg) })
+    love.state.suspend_msg = nil
   end
 
   self.model.output:invalidate_terminal()
 
   self.main_ctrl.save_user_handlers(runner_env['love'])
   self.main_ctrl.set_default_handlers(self, self.view)
+end
+
+--- @param msg string?
+function ConsoleController:suspend_run(msg)
+  if love.state.app_state ~= 'running' then
+    return
+  end
+  love.state.app_state = 'snapshot'
+  love.state.suspend_msg = msg
 end
 
 --- @param name string
