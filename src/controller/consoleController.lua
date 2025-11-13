@@ -326,6 +326,28 @@ function ConsoleController.prepare_env(cc)
     cc:run_project(name)
   end
 
+  local terminal            = cc.model.output.terminal
+  local compy_namespace     = {
+    terminal = {
+      --- @param x number
+      --- @param y number
+      gotoxy = function(x, y)
+        return terminal:move_to(x, y)
+      end,
+      show_cursor = function()
+        return terminal:show_cursor()
+      end,
+      hide_cursor = function()
+        return terminal:hide_cursor()
+      end,
+      clear = function()
+        return terminal:clear()
+      end
+    }
+  }
+  prepared.compy            = compy_namespace
+  prepared.tty              = compy_namespace.terminal
+
   prepared.run              = prepared.run_project
 
   prepared.eval             = LANG.eval
