@@ -400,11 +400,16 @@ Controller = {
       local uup = Controller._userhandlers.update
       if user_update and uup
       then
+        if love.state.app_state == 'snapshot' then
+          gfx.captureScreenshot(function(img)
+            local snap = gfx.newImage(img)
+            View.snapshot = snap
+            C:suspend()
+          end)
+        end
         wrap(uup, dt)
       end
-      if _mode ~= 'play' then
-        Controller.snapshot()
-      end
+
       if love.harmony then
         love.harmony.timer_update(dt)
       end
@@ -466,13 +471,6 @@ Controller = {
       end
     end
     love.quit = quit
-  end,
-
-  --- @private
-  snapshot = function()
-    if user_draw then
-      View.snap_canvas()
-    end
   end,
 
   ----------------
@@ -793,6 +791,7 @@ Controller = {
     for _, a in pairs(_supported) do
       save_if_differs(a)
     end
+
     save_if_differs('draw')
   end,
 

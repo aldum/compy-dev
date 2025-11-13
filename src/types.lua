@@ -138,6 +138,7 @@
 --- @field app_state AppState
 --- @field prev_state AppState?
 --- @field editor EditorState?
+--- @field suspend_msg string?
 
 --- @class LoveDebug table
 --- @field show_snapshot boolean
