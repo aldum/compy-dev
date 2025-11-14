@@ -23,8 +23,10 @@ SearchView = class.create(new)
 function SearchView:draw()
   local ctrl = self.controller
   local rs = ctrl:get_results()
+  gfx.push("all")
   self.results:draw(rs)
   if ViewUtils.conditional_draw('show_input') then
     self.input:draw()
   end
+  gfx.pop()
 end
