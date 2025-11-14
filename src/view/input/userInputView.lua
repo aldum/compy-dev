@@ -141,7 +141,9 @@ function UserInputView:render_input(input, status)
   gfx.setFont(self.cfg.font)
   drawBackground()
 
+  gfx.push('all')
   self.statusline:draw(status, 0)
+  gfx.pop()
 
   if highlight then
     local hl = highlight.hl
@@ -273,10 +275,12 @@ function UserInputView:render_input(input, status)
       end
     end
   else
+    gfx.push('all')
     gfx.setColor(colors.fg)
     for l, str in ipairs(visible) do
       ViewUtils.write_line(l, str, fh, 0, self.cfg)
     end
+    gfx.pop()
   end
   drawCursor()
 end
@@ -324,7 +328,7 @@ function UserInputView:render(input, status)
   local isError = string.is_non_empty_string_array(err_text)
 
   gfx.setCanvas(self.canvas)
-  gfx.clear(0,0,0)
+  gfx.clear(0, 0, 0, 1)
   if isError then
     self:render_error(err_text)
   else
@@ -339,7 +343,11 @@ function UserInputView:draw()
     self.controller:update_view()
   end
   local h = self.start_h
+  gfx.push('all')
+  gfx.setBlendMode("replace")
   love.graphics.draw(self.canvas, 0, h)
+  gfx.setBlendMode("alpha")
+  gfx.pop()
 end
 
 --- Whether the cursor is at limit, accounting for word wrap.
