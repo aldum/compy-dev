@@ -273,9 +273,9 @@ function UserInputView:render_input(input, status)
       end
     end
   else
+    gfx.setColor(colors.fg)
     for l, str in ipairs(visible) do
-      gfx.setColor(colors.fg)
-      ViewUtils.write_line(l, str, start_y, 0, self.cfg)
+      ViewUtils.write_line(l, str, fh, 0, self.cfg)
     end
   end
   drawCursor()
