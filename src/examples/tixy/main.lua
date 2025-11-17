@@ -1,15 +1,23 @@
+--- @diagnostic disable: duplicate-set-field,lowercase-global
+-- Title: TIXY viewer (Compy-friendly)
+
 local G = love.graphics
 math.randomseed(os.time())
+
 cw, ch = G.getDimensions()
 midx = cw / 2
 
 require("math")
 require("examples")
 
+-- =========[ Layout / grid ]=========
 size = 28
 spacing = 3
 offset = size + 4
+count = 16
+ex_idx = 1
 
+-- =========[ Colors ]=========
 local colors = {
   bg = Color[Color.black],
   pos = Color[Color.white + Color.bright],
@@ -18,28 +26,31 @@ local colors = {
   help = Color.with_alpha(Color[Color.white], 0.5)
 }
 
+-- =========[ Help text ]=========
+local help_lines = {
+  "Hint:",
+  "left click for next example",
+  "shift + left click to go back",
+  "right click for a random one"
+}
+
+help = table.concat(help_lines, "\n")
+showHelp = true
+
+-- =========[ Example source / legend ]=========
 body = ""
 legend = ""
-help =
-    "Hint:\n" ..
-    "left click for next example\n" ..
-    "shift + left click to go back\n" ..
-    "right click for a random one"
-showHelp = true
-count = 16
-ex_idx = 1
 local time = 0
 
-function load_example(ex)
-  if type(ex) == "table" then
-    body = ex.code
-    setupTixy()
-    legend = ex.legend
-    write_to_input(body)
-  end
+local function load_example(ex)
+  if type(ex) ~= "table" then return end
+  body = ex.code
+  legend = ex.legend
+  setupTixy()
+  write_to_input(body)
 end
 
-function advance()
+local function next_example()
   local e = examples[ex_idx]
   load_example(e)
   if ex_idx < #examples then
@@ -48,25 +59,24 @@ function advance()
   end
 end
 
-function retreat()
-  if 1 < ex_idx then
-    local e = examples[ex_idx]
-    load_example(e)
-    ex_idx = ex_idx - 1
-    time = 0
-  end
+local function prev_example()
+  if ex_idx <= 1 then return end
+  local e = examples[ex_idx]
+  load_example(e)
+  ex_idx = ex_idx - 1
+  time = 0
 end
 
-function pick_random(t)
-  if type(t) == "table" then
-    local n = #t
-    local r = math.random(n)
-    return t[r], r
-  end
+local function pick_random(t)
+  if type(t) ~= "table" then return end
+  local n = #t
+  local r = math.random(n)
+  return t[r], r
 end
 
-function randomize()
+local function randomize()
   local e, i = pick_random(examples)
+  if not e then return end
   load_example(e)
   ex_idx = i + 1
 end
@@ -87,76 +97,73 @@ function n2b(n)
   end
 end
 
-function tixy(t, i, x, y)
-  return 0.1
-end
 
+function tixy(_, _, _, _) return 0.1 end
+
+-- FIX: normalize newlines before loadstring
 function setupTixy()
-  local code = "return function(t, i, x, y)\n" .. body .. " end"
+  local head = "return function(t, i, x, y)\n"
+  local src = tostring(body):gsub("\\n", "\n")
+  local code = head .. src .. "\nend"
   local f = loadstring(code)
-  if f then
-    setfenv(f, _G)
-    tixy = f()
-  end
+  if not f then return end
+  setfenv(f, _G)
+  tixy = f()
 end
 
-function drawBackground()
+-- =========[ Drawing ]=========
+local function drawBackground()
   G.setColor(colors.bg)
   G.rectangle("fill", 0, 0, cw, ch)
 end
 
-function drawCircle(color, radius, x, y)
+local function drawCircle(color, r, cx, cy)
   G.setColor(color)
-  G.circle(
-    "fill",
-    x * (size + spacing) + offset,
-    y * (size + spacing) + offset,
-    radius
-  )
-  G.circle(
-    "line",
-    x * (size + spacing) + offset,
-    y * (size + spacing) + offset,
-    radius
-  )
+  local step = size + spacing
+  local sx = cx * step + offset
+  local sy = cy * step + offset
+  G.circle("fill", sx, sy, r)
+  G.circle("line", sx, sy, r)
 end
 
-function clamp(value)
+local function clamp(value)
   local color = colors.pos
   local radius = (value * size) / 2
   if radius < 0 then
     radius = -radius
     color = colors.neg
   end
-  if size / 2 < radius then
-    radius = size / 2
-  end
+  if radius > size / 2 then radius = size / 2 end
   return color, radius
 end
 
-function drawOutput()
-  local index = 0
+local function drawCell(ts, idx, x, y)
+  local v = tonumber(tixy(ts, idx, x, y)) or -0.1
+  local color, radius = clamp(v)
+  drawCircle(color, radius, x, y)
+end
+
+local function drawOutput()
+  local idx = 0
   local ts = time
   for y = 0, count - 1 do
     for x = 0, count - 1 do
-      local value = tonumber(tixy(ts, index, x, y)) or -0.1
-      local color, radius = clamp(value)
-      drawCircle(color, radius, x, y)
-      index = index + 1
+      drawCell(ts, idx, x, y)
+      idx = idx + 1
     end
   end
 end
 
-function drawText()
+local function drawText()
   G.setColor(colors.text)
   local sof = (size / 2) + offset
   local hof = sof / 2
-  G.printf(legend, midx + hof, sof, midx - sof)
-  if showHelp then
-    G.setColor(colors.help)
-    G.setFont(font)
-    G.printf(help, midx + hof, ch - (5 * sof), midx - sof)
-  end
+  local w = midx - sof
+  G.printf(legend, midx + hof, sof, w)
+  if not showHelp then return end
+  G.setColor(colors.help)
+  G.setFont(font)
+  G.printf(help, midx + hof, ch - (5 * sof), w)
 end
 
 function love.draw()
@@ -165,31 +172,30 @@ function love.draw()
   drawText()
 end
 
+-- =========[ Live code input ]=========
 r = user_input()
 
 function love.update(dt)
   time = time + dt
   if r:is_empty() then
-    input_code("function tixy(t, i, x, y)", string.lines(body))
-  else
-    local ret = r()
-    body = string.unlines(ret)
-    setupTixy()
-    legend = ""
+    input_code(
+      "function tixy(t, i, x, y)",
+      string.lines(body)
+    )
+    return
   end
+  local ret = r()
+  body = string.unlines(ret)
+  setupTixy()
+  legend = ""
 end
 
+-- =========[ Mouse controls ]=========
 function love.mousepressed(_, _, button)
   if button == 1 then
-    if Key.shift() then
-      retreat()
-    else
-      advance()
-    end
+    if Key.shift() then prev_example() else next_example() end
   end
-  if button == 2 then
-    randomize()
-  end
+  if button == 2 then randomize() end
 end
 
-advance()
+next_example()

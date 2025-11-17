@@ -1,259 +1,190 @@
-## Life
+Life
 
-This is a simple Game of Life implementation, which is maybe not the first, but certainly the best known zero-player computer game.
-The game field is a two-dimensional array (grid), where each **cell** (block, square) is either _alive_ or _dead_ (in programming parlance, `1` or `0`).
-Given the initial state and a few simple rules, we are simulatiing the life of these cells.
+This is a simple Game of Life implementation — the best-known zero-player computer game.
+The field is a 2D grid where each cell is either alive (1) or dead (0).
+Given an initial state and a few rules, we simulate the evolution of the cells.
 
-### Screen size
+Screen size
 
-We have used the screen size before, but only in a very limited capacity, to determine where the middle is. This time, however, the whole game depends on how much pixels we have available.
+Unlike earlier demos where we only needed the center, here the whole game depends on how many pixels we have.
+local G = love.graphics
+local CELL = 10
 
-```lua
-cell_size = 10
-screen_w, screen_h = G.getDimensions()
-grid_w = screen_w / cell_size
-grid_h = screen_h / cell_size
-```
+local S = { w = 0, h = 0, gw = 0, gh = 0 }
 
-`getDimensions()` gives us the width and height of the screen, which we will divide by some scaling factor (say 10), resulting in a grid of 10-by-10 cells.
+local function init_dims()
+  S.w, S.h = G.getDimensions()
+  S.gw = math.floor(S.w / CELL)
+  S.gh = math.floor(S.h / CELL)
+end
 
-### Setup
 
-Starting up, generate random values for cell states:
+getDimensions() returns the screen width/height. We divide by CELL to get a grid size in cells.
 
-```lua
-local function initializeGrid()
-  for x = 1, grid_w do
-    grid[x] = {}
-    for y = 1, grid_h do
-      -- Initialize with some random live cells
-      grid[x][y] = math.random() > 0.7 and 1 or 0
+Setup
+
+At startup, we generate a random initial pattern. All state is local, stored in S
+local function clear_grid(dst)
+  for x = 1, S.gw do
+    dst[x] = dst[x] or {}
+    for y = 1, S.gh do
+      dst[x][y] = 0
     end
   end
 end
-```
 
-### Simulation
-
-Then, at each step, we apply the following rules:
-* Any live cell with fewer than two live neighbours dies
-* Any live cell with two or three live neighbours lives on
-* Any live cell with more than three live neighbours dies
-* Any dead cell with exactly three live neighbours becomes a live cell
-
-(excerpt from `updateGrid()`)
-```lua
-  local neighbors = countAliveNeighbors(x, y)
-  if grid[x][y] == 1 then
-    newGrid[x][y] =
-        (neighbors == 2 or neighbors == 3) and 1 or 0
-  else
-    newGrid[x][y] = (neighbors == 3) and 1 or 0
-  end
-```
-
-We could just update the grid state on every `update()`, but that would mean the simulation has no consistent pace, it's going as fast as the hardware can crank update calls out, varying between devices.
-Instead, we will create a simple timer. The timer is keeping track of elapsed time, and producing "ticks" inversely proportional to a set simulation speed.
-On each tick, the grid updates and timer resets.
-
-```lua
-time = 0
-speed = 10
-
-tick = function()
-  if time > (1 / speed) then
-    time = 0
-    return true
+local function init_grid()
+  S.grid, S.next = {}, {}
+  clear_grid(S.grid)
+  clear_grid(S.next)
+  for x = 1, S.gw do
+    for y = 1, S.gh do
+      S.grid[x][y] = (math.random() < 0.3) and 1 or 0
+    end
   end
 end
 
-function love.update(dt)
-  time = time + dt
-  if tick() then
-    updateGrid()
+
+Simulation
+
+On each step we apply Conway’s rules:
+
+A live cell with fewer than 2 live neighbours dies.
+
+A live cell with 2 or 3 live neighbours lives on.
+
+A live cell with more than 3 live neighbours dies.
+
+A dead cell with exactly 3 live neighbours becomes alive.
+local function alive_neighbors(x, y)
+  local c = 0
+  for dx = -1, 1 do
+    for dy = -1, 1 do
+      if not (dx == 0 and dy == 0) then
+        c = c + get_cell(x + dx, y + dy)
+      end
+    end
+  end
+  return c
+end
+
+local function step_grid()
+  for x = 1, S.gw do
+    for y = 1, S.gh do
+      local n = alive_neighbors(x, y)
+      local v = S.grid[x][y]
+      if v == 1 then
+        S.next[x][y] = (n == 2 or n == 3) and 1 or 0
+      else
+        S.next[x][y] = (n == 3) and 1 or 0
+      end
+    end
+  end
+  S.grid, S.next = S.next, S.grid
+end
+
+
+We don’t update every update() call, because frame rates differ between devices.
+Instead we keep a simple timer and step the grid at a controlled pace:
+local SPEED_MIN, SPEED_MAX = 1, 99
+local function clamp(v, lo, hi)
+  if v < lo then return lo end
+  if hi < v then return hi end
+  return v
+end
+
+-- S.speed = steps per second; S.t = accumulator
+local function try_step(dt)
+  S.t = S.t + dt
+  local need = 1 / clamp(S.speed, SPEED_MIN, SPEED_MAX)
+  if S.t >= need then
+    S.t = S.t - need
+    step_grid()
   end
 end
-```
 
-### Controls
 
-Being a zero-player game, there's not much to do in the user interaction department. Still, we would like to add the ability to start a new simulation without restarting the whole run, and a knob to adjust the simulation speed.
+Controls
 
-```lua
-function changeSpeed(d)
+This is a zero-player game, but we still want to reset the board and tweak the simulation speed.
+local function change_speed(d)
   if not d then return end
-  if d < 0 and 1 < speed then
-    speed = speed - 1
-  end
-  if 0 < d and speed < 99 then
-    speed = speed + 1
-  end
+  S.speed = clamp(S.speed + d, SPEED_MIN, SPEED_MAX)
 end
 
 function love.keypressed(k)
+  ensure_init()
   if k == "r" then
-    init()
-  end
-  if k == "-" then
-    changeSpeed(-1)
-  end
-  if k == "+" or k == "=" then
-    changeSpeed(1)
+    init_grid()
+  elseif k == "-" then
+    change_speed(-1)
+  elseif k == "+" or k == "=" then
+    change_speed(1)
   end
 end
-```
 
-Simple and straightforward on the keyboard. However...
 
-### Touch
+Touch
 
-Until now, we had no concern about running our games outside the environment they are being developed in, so let's give this some thought.
-In development, we have a keyboard and mouse, but people these days mostly use a smartphone or tablet as their first (and possibly only) choice.
-Therefore, it would be useful to support touchscreens as an input method, too.
-Fortunately, LOVE2D is helpful in this regard, as it also fires a mouse event, even if when the interaction was a tap on a touchscreen. This means that to support single touch, we don't have to do anything that different, other than paying attention to the limitations when designing the game controls.
+Modern devices are often touch-only. LOVE2D helps by emitting mouse events for taps, so single-touch support is straightforward.
 
-#### Reset
+Reset (long press)
 
-What's a simple keystroke, is a little more involved with the mouse/touchscreen.
-Any accidental tap should not trigger it, so we need to keep track of the time elapsed while the button or finger is held in the `update` function:
+We record how long the press lasted in update() and trigger a reset when it exceeds a threshold.
+local HOLD_RST = 1 -- seconds
 
-```lua
-hold_time = 0
-function love.mousepressed(_, y, button)
-  if button == 1 then
-    if love.mouse.isDown(1) then
-      hold_time = hold_time + dt
-    end
-  end
-end
-```
-
-When the same button is released, we check if it was held long enough.
-Either way, reset the timer.
-
-```lua
-function love.mousereleased(_, y, button)
-  if button == 1 then
-    mouse_held = false
-    if reset_time < hold_time then
-      init()
-    end
-    hold_time = 0
-  end
-end
-```
-
-#### Speed
-
-How to handle speeding up and down? We could split the screen up, and say that tapping the top half increases speed, while the bottom half decreases it:
-
-```lua
-function love.mousereleased(_, y, button)
-  if button == 1 then
-    mouse_held = false
-    if reset_time < hold_time then
-      init()
-    else
-      if y < mid_y then
-        changeSpeed(1)
-      else
-        changeSpeed(-1)
-      end
-    end
-    hold_time = 0
-  end
-end
-```
-
-(Remember, the y coordinate grows from the top of the screen towards the bottom)
-This is a fine solution, but we can make it more interesting. Some videoplayer apps have a user experience where if you drag your finger on the screen, it adjusts the volume or the brightness, depending on direction. That sounds more interesting, let's implement it!
-
-For a first approximation, try the `mousemoved` handler:
-```lua
-g_dir = nil
-
-function love.mousemoved(_, _, _, dy)
+function love.update(dt)
+  ensure_init()
   if love.mouse.isDown(1) then
-    if dy < 0 then
-      g_dir = 1
-    elseif dy > 0 then
-      g_dir = -1
-    end
+    S.hold_dt = S.hold_dt + dt
   end
+  try_step(dt)
 end
-```
 
-This sets the pull direction while holding a click or tap. Then at release, change the speed accordingly:
 
-```lua
-function love.mousereleased(_, _, button)
-  if button == 1 then
-    mouse_held = false
-    if hold_time > 1 then
-      init()
-    elseif g_dir then
-      changeSpeed(g_dir)
-    end
-    hold_time = 0
-  end
-end
-```
+On release we either reset or interpret the gesture for speed control:
+local EPSILON = 3 -- pixels
 
-There's one problem with this approach: all taps will change the speed if there's even a miniscule difference between press and release. We should introduce some kind of treshold for the number of pixels the difference needs to be for it to count as a purposeful gesture.
-Scrapping our first approach, we'll do something similar to the long tap: record the position on press...
-
-```lua
-hold_y = nil
 function love.mousepressed(_, y, button)
+  ensure_init()
   if button == 1 then
-    mouse_held = true
-    hold_y = y
+    S.hold_y = y
+    S.hold_dt = 0
   end
 end
-```
 
-...and compare it when it's released:
-
-```lua
-epsilon = 3
 function love.mousereleased(_, y, button)
-  if button == 1 then
-    mouse_held = false
-    if reset_time < hold_time then
-      init()
-    else
-      if hold_y then
-        local dy = hold_y - y
-        if math.abs(dy) > epsilon then
-          changeSpeed(dy)
-        end
+  ensure_init()
+  if button ~= 1 then return end
+  if S.hold_dt >= HOLD_RST then
+    init_grid()
+  else
+    if S.hold_y then
+      local dy = S.hold_y - y
+      if math.abs(dy) > EPSILON then
+        change_speed(dy) -- drag up = faster, down = slower
       end
     end
-    hold_y = nil
-    hold_time = 0
   end
+  S.hold_y = nil
+  S.hold_dt = 0
 end
-```
 
-As you can see, I have determined that the difference should be at least 3 pixels, regardless of the sign (hence the `maths.abs()`).
 
-### Help text
+Help text
 
-With all that done, add some explanations for our users, and call it a day.
-Note the calculations we need to make so it shows up relative to the bottom of the screen:
+We draw a small overlay near the bottom edge. Font and sizes are kept in S.
+local MARGIN = 5
 
-```lua
-margin = 5
-
-function drawHelp()
-  local bottom = screen_h - margin
-  local right_edge = screen_w - margin
+local function draw_help()
+  local bottom = S.h - MARGIN
+  local right  = S.w - MARGIN
   local reset_msg = "Reset: [r] key or long press"
-  local speed_msg = "Set speed: [+]/[-] key or drag up/down"
-  G.print(reset_msg, margin, (bottom - fh) - fh)
-  G.print(speed_msg, margin, bottom - fh)
-  local speed_label = string.format("Speed: %02d", speed)
-  local label_w = font:getWidth(speed_label)
-  G.print(speed_label, right_edge - label_w, bottom - fh)
+  local speed_msg = "Speed: [+]/[-] or drag up/down"
+  G.print(reset_msg, MARGIN, (bottom - S.fh) - S.fh)
+  G.print(speed_msg, MARGIN, bottom - S.fh)
+  local label = string.format("Speed: %02d", S.speed)
+  local lw = S.font:getWidth(label)
+  G.print(label, right - lw, bottom - S.fh)
 end
-```
+

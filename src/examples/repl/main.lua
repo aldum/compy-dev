@@ -1,9 +1,15 @@
-r = user_input()
+
+
+local r = user_input()
 
 function love.update()
-  if r:is_empty() then
+  -- If there is no user text, ask for input
+  if not r or r:is_empty() then
     input_text()
-  else
-    print(r())
+    return
   end
+
+  -- Avoid complex inline expressions: read then print
+  local value = r()
+  print(value)
 end

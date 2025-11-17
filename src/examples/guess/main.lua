@@ -1,59 +1,66 @@
-math.randomseed(os.time())
-r = user_input()
-N = 100
--- number_to_guess
-ntg = 0
+-- main.lua
+-- Guess-the-number: clear, didactic, Compy-friendly.
 
-function init()
-  print("Welcome to the guessing game!")
-  ntg = math.random(N)
+local MAX_NUM = 100
+
+-- Local state, no globals.
+local S = {
+  input = user_input(),
+  target = 0
+}
+
+local function say(msg)
+  print(msg)
 end
 
-function is_natural(s)
+local function init_game()
+  say("Welcome to the guessing game!")
+  math.randomseed(os.time())
+  S.target = math.random(MAX_NUM)
+end
+
+-- Accepts a string; returns (ok, n or err_msg)
+local function parse_positive_int(s)
   local n = tonumber(s)
   if not n then
-    return false, "NaN"
+    return false, "Not a number"
   end
   if n <= 0 then
-    return false, "Not a positive number!"
+    return false, "Not a positive number"
   end
   if math.floor(n) ~= n then
-    return false, "Not an integer!"
+    return false, "Not an integer"
   end
-  return true
+  return true, n
 end
 
-function is_natural(s)
-  local digits = string.usub(s, 1)
-  local ok, err_c = string.forall(digits, Char.is_digit)
-  if ok then
-    return true
-  end
-  return false, Error("The guess should be a positive number", err_c)
-end
-
-function check(n)
+local function check_guess(n)
   if not n then
     return
   end
-  if ntg < n then
-    print("The number is lower")
-  elseif n < ntg then
-    print("The number is higher")
+  if S.target < n then
+    say("The number is lower")
+  elseif n < S.target then
+    say("The number is higher")
   else
-    print("Correct!")
-    print("\n\n")
-    init()
+    say("Correct!")
+    say("")
+    init_game()
   end
 end
 
 function love.update()
-  if r:is_empty() then
-    validated_input({ is_natural }, "Guess a number:")
+  if S.input:is_empty() then
+    validated_input({ parse_positive_int }, "Guess a number:")
   else
-    local n = tonumber(r())
-    check(n)
+    local s = S.input()
+    local ok, val_or_err = parse_positive_int(s)
+    if ok then
+      check_guess(val_or_err)
+    else
+      say(val_or_err)
+    end
   end
 end
 
-init()
+init_game()

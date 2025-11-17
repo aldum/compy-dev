@@ -1,42 +1,82 @@
-### REPL
 
-This project provides example of the minimum code required for utilizing the builtin user input helper. It also demonstrates taking control of application updates by overriding `love.update`.
-The project is very light on functionality, only echoing the text the user enters.
+# REPL
 
-#### Using user input
+This project provides an example of the **minimum code** required for  
+utilizing the builtin user input helper. It also demonstrates taking  
+control of application updates by overriding `love.update`.
 
-The process of reading values from console has a necessarily asynchronous nature to it. The result can not be available at the point of declaring the variable that holds it.
-Hence, it has to consist of multiple steps: first, we create a handle; then initiate the prompt, and only when the user is finished, can we read the data supplied.
+The project is very light on functionality: it only echoes the text  
+the user enters.
 
-How this translates into code:
+---
+
+## Using user input
+
+Reading values from console is inherently asynchronous.  
+The result is not available at the point of declaring the variable.  
+
+Therefore the workflow has to consist of several steps:
+
+1. **Create a handle**  
+2. **Prompt the user if empty**  
+3. **Read the value when available**
+
+### Example
+
 ```lua
 -- create a handle
-r = user_input()
+local r = user_input()
 
--- if it doesn't hold a value currently, prompt the user
+-- custom update routine
 function repl()
-  if r:is_empty() then
+  if not r or r:is_empty() then
+    -- prompt the user for text
     input_text()
-  else
-    -- read the value
-    local input = r()
+    return
   end
+
+  -- read the value and echo it
+  local input = r()
+  print(input)
 end
-```
+````
 
-There are two options available:
-* `input_text()` for plaintext
-* `input_code()` which only accepts syntactically valid lua 
-(Validated input is not discussed here, see the 'valid' project)
+Two helper functions are available:
 
-#### Update
+* `input_text()` for plaintext input
+* `input_code()` which only accepts syntactically valid Lua
+  (Validated input is not discussed here, see the 'valid' project.)
 
-To create interactivity, a program needs to run continuously, waiting for input and reacting to it.
-In LOVE2D, this is achieved by overriding various handlers, the first of which is `update()`. 
-By defining `love.update()`, we can control what happens when time passes:
+---
+
+## Update loop
+
+To create interactivity, a program needs to run continuously,
+waiting for input and reacting to it.
+
+In LOVE2D this is achieved by overriding `love.update`.
+By defining it, we control what happens as time passes.
+
 ```lua
-function love.update(dt)
+function love.update()
   repl()
 end
 ```
-The parameter `dt` is the (fractional) number of seconds passed since the last run of the function.
+
+> Note: `love.update` can take a `dt` argument (delta time in seconds),
+> but in this minimal REPL example it is not used.
+
+---
+
+## Summary
+
+This project shows:
+
+* how to hook into the user input helper
+* how to separate prompting from reading values
+* how to override `love.update` to create a simple REPL loop
+
+The result is a minimal echo program:
+whatever the user types gets printed back.
+
+

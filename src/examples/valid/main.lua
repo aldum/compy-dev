@@ -1,5 +1,6 @@
 r = user_input()
 
+-- Checks minimum length (unicode-aware)
 function min_length(n)
   return function(s)
     local l = string.ulen(s)
@@ -10,35 +11,29 @@ function min_length(n)
   end
 end
 
+-- Checks maximum length inclusive (unicode-aware)
 function max_length(n)
   return function(s)
-    if string.len(s) <= n then
+    if string.ulen(s) <= n then
       return true
     end
     return false, Error("too long!", n + 1)
   end
 end
 
+-- Verifies all characters are uppercase (clear + short)
 function is_upper(s)
-  local ret = true
-  local l = string.ulen(s)
-  local err_c
-  local i = 1
-  while ret and i <= l do
-    local v = string.usub(s, i, i)
-    if v ~= string.upper(v) then
-      ret = false
-      err_c = i
-    end
-    i = i + 1
+  local function is_up(c)
+    return c == string.upper(c)
   end
-
-  if ret then
+  local ok, err_c = string.forall(s, is_up)
+  if ok then
     return true
   end
   return false, Error("should be all uppercase", err_c)
 end
 
+-- Verifies all characters are lowercase (helper-based)
 function is_lower(s)
   local ok, err_c = string.forall(s, Char.is_lower)
   if ok then
@@ -47,6 +42,7 @@ function is_lower(s)
   return false, Error("should be lowercase", err_c)
 end
 
+-- Checks signed integer form: optional '-' + digits
 function is_number(s)
   local sign = string.usub(s, 1, 1)
   local offset = 0
@@ -61,6 +57,7 @@ function is_number(s)
   return false, Error("NaN", err_c + offset)
 end
 
+-- Natural integer (>= 0). Returns true on success.
 function is_natural(s)
   local is_num, err = is_number(s)
   if not is_num then
@@ -70,8 +67,10 @@ function is_natural(s)
   if n < 0 then
     return false, Error("It's negative!", 1)
   end
+  return true
 end
 
+-- Demo loop: ask for input with validations; else echo
 function love.update()
   if r:is_empty() then
     validated_input({

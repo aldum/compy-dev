@@ -1,23 +1,47 @@
-### Input validation
+# Input validation (Compy-friendly Lua)
 
-As an extension to the user input functionality, `validated_input()` allows arbitrary user-specified filters.
-A "filter" is a function, which takes a string as input and returns a boolean value of whether it is valid and an optional `Error`.
-The `Error` is structure which contains the error message (`msg`), and the location the error comes from, with line and character fields (`l` and `c`).
+This project demonstrates how to **validate user input** in Lua, 
+following Compy formatting rules:
 
-Example:
+* Maximum line length: 64 characters  
+* Functions and tables: ≤ 14 lines  
+* ≤ 4 arguments per function  
+* Nesting level: ≤ 4  
+* No complex inline expressions  
+* Code must be clear and pedagogical  
+
+---
+
+## Usage
+
 ```lua
-function non_empty(s)
-  if string.ulen(s) == 0 then
-     return false, Error('Input is empty!')
+r = user_input()
+
+function love.update()
+  if r:is_empty() then
+    validated_input({
+      min_length(2),
+      is_lower
+    })
+  else
+    print(r())
   end
-  return true
 end
-```
-This is not a particularly useful validator, as the input will not be accepted and ran through the validations if it doesn't contain anything, but it demonstrates the idea quite well.
+````
 
-Filters will be run line-by-line, if the input has multiple lines, the line number is also indicated when it's invalid.
-For increased visual usefulness, your validations can report on the first character which does not satisfy the criteria required:
+Here:
+
+* If no input is present, the program **prompts** with validation.
+* Otherwise, it **prints** the entered value.
+
+---
+
+## Validators
+
+### Minimum length
+
 ```lua
+-- Checks that the string has more than n characters
 function min_length(n)
   return function(s)
     local l = string.ulen(s)
@@ -28,11 +52,41 @@ function min_length(n)
   end
 end
 ```
-This will result the entered text being red starting from the problem location.
 
-Of course, this means in some cases that the line has to be validated char-by-char. To facilitate this, we provide the `string.forall()` helper, and a `Char` table containing some classifier functions.
-`string.forall()` takes a validation function and runs it on each character, returning `true` if the string is valid, or `false` and the index of the offending character:
+### Maximum length
+
 ```lua
+-- Checks that the string is at most n characters long
+function max_length(n)
+  return function(s)
+    if string.ulen(s) <= n then
+      return true
+    end
+    return false, Error("too long!", n + 1)
+  end
+end
+```
+
+### All uppercase
+
+```lua
+-- Verifies every character is uppercase
+function is_upper(s)
+  local function is_up(c)
+    return c == string.upper(c)
+  end
+  local ok, err_c = string.forall(s, is_up)
+  if ok then
+    return true
+  end
+  return false, Error("should be all uppercase", err_c)
+end
+```
+
+### All lowercase
+
+```lua
+-- Verifies every character is lowercase
 function is_lower(s)
   local ok, err_c = string.forall(s, Char.is_lower)
   if ok then
@@ -42,29 +96,63 @@ function is_lower(s)
 end
 ```
 
-If you're curious about the details, check out `is_upper()`, which provides a manual implementation.
-
-#### Invoking
+### Signed integer
 
 ```lua
-r = user_input()
-validated_input({non_empty})
+-- Checks for integer with optional minus sign
+function is_number(s)
+  local sign = string.usub(s, 1, 1)
+  local offset = 0
+  if sign == '-' then
+    offset = 1
+  end
+  local digits = string.usub(s, 1 + offset)
+  local ok, err_c = string.forall(digits, Char.is_digit)
+  if ok then
+    return true
+  end
+  return false, Error("NaN", err_c + offset)
+end
 ```
 
-Validations are applied to the input by passing an array of functions. Note the lack of parentheses after the function name, we don't want to call it yet, just refer to it by name.
+### Natural number
 
-#### Helper functions
+```lua
+-- Checks that the number is non-negative
+function is_natural(s)
+  local is_num, err = is_number(s)
+  if not is_num then
+    return false, err
+  end
+  local n = tonumber(s)
+  if n < 0 then
+    return false, Error("It's negative!", 1)
+  end
+  return true
+end
+```
 
-* `string.ulen(s)` - as opposed to the builtin `len()`, this works for unicode strings
-* `string.usub(s, from, to)` - unicode substrings
-* `Char.is_alpha(c)` - is `c` a letter
-* `Char.is_alnum(c)` - is `c` a letter or a number (alphanumeric)
-* `Char.is_lower(c)` - is `c` lowercase
-* `Char.is_upper(c)` - is `c` uppercase
-* `Char.is_digit(c)` - is `c` a number
-* `Char.is_space(c)` - is `c` whitespace
-* `Char.is_punct(c)` - is `c` punctuation (!, ?, &, ;, parentheses, ...)
+---
 
-Note that determining if something is a letter, or what case it is only reliable for the english alphabet.
+## Helpers available
 
-* `Error(msg, c, l)` - for creating errors, `l` and `c` are optional
+* `string.ulen(s)` — unicode length
+* `string.usub(s, from, to)` — unicode substring
+* `string.forall(s, f)` — apply predicate `f` to each character
+* `Char.is_alpha(c)` — is letter
+* `Char.is_alnum(c)` — is alphanumeric
+* `Char.is_lower(c)` — is lowercase
+* `Char.is_upper(c)` — is uppercase
+* `Char.is_digit(c)` — is digit
+* `Char.is_space(c)` — is whitespace
+* `Char.is_punct(c)` — punctuation
+
+---
+
+## Notes
+
+* Validations are passed **as functions**, not called immediately.
+* Errors highlight the location of the problem character.
+* Designed for teaching: each function is short, commented, and
+  formatted for readability.
+

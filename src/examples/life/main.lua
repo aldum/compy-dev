@@ -1,184 +1,202 @@
---- original from https://github.com/Aethelios/Conway-s-Game-of-Life-in-Lua-and-Love2D
+-- main.lua
+--  Game of Life — Compy-friendly.
 
-G = love.graphics
-G.setFont(font)
-fh = font:getHeight()
+local G = love.graphics
 
-cell_size = 10
-margin = 5
-screen_w, screen_h = G.getDimensions()
-grid_w = screen_w / cell_size
-grid_h = screen_h / cell_size
-grid = {}
+-- ---------- constants ----------
+local CELL      = 10
+local MARGIN    = 5
+local SPEED_MIN = 1
+local SPEED_MAX = 99
+local EPSILON   = 3
+local HOLD_RST  = 1
 
-mouse_held = false
-hold_y = nil
-hold_time = 0
-speed = 10
-time = 0
-epsilon = 3
-reset_time = 1
+-- ---------- local state ----------
+local S = {
+  inited  = false,
+  w = 0, h = 0,
+  gw = 0, gh = 0,
+  grid = {}, next = {},
+  speed = 10, t = 0,
+  hold_y = nil, hold_dt = 0,
+  font = nil, fh = 0
+}
 
-tick = function()
-  if time > (1 / speed) then
-    time = 0
-    return true
-  end
+-- ---------- helpers ----------
+local function clamp(v, lo, hi)
+  if v < lo then return lo end
+  if hi < v then return hi end
+  return v
 end
 
-function initializeGrid()
-  for x = 1, grid_w do
-    grid[x] = {}
-    for y = 1, grid_h do
-      -- Initialize with some random live cells
-      grid[x][y] = 0.7 < math.random() and 1 or 0
+local function init_dims()
+  S.w, S.h = G.getDimensions()
+  S.gw = math.floor(S.w / CELL)
+  S.gh = math.floor(S.h / CELL)
+end
+
+local function new_font()
+  S.font = G.newFont(14)
+  S.fh = S.font:getHeight()
+  G.setFont(S.font)
+end
+
+local function clear_grid(dst)
+  for x = 1, S.gw do
+    dst[x] = dst[x] or {}
+    for y = 1, S.gh do
+      dst[x][y] = 0
     end
   end
 end
 
-local function init()
-  time = 0
-  initializeGrid()
+local function init_grid()
+  S.grid, S.next = {}, {}
+  clear_grid(S.grid)
+  clear_grid(S.next)
+  for x = 1, S.gw do
+    for y = 1, S.gh do
+      local live = math.random() < 0.3 and 1 or 0
+      S.grid[x][y] = live
+    end
+  end
 end
 
-function countHelper(nx, ny)
+local function in_bounds(x, y)
+  return 1 <= x and x <= S.gw and 1 <= y and y <= S.gh
+end
+
+local function get_cell(x, y)
+  if not in_bounds(x, y) then return 0 end
+  return S.grid[x][y]
+end
+
+local function alive_neighbors(x, y)
   local c = 0
-  if 1 <= nx
-      and nx <= grid_w
-      and 1 <= ny
-      and ny <= grid_h
-  then
-    local row = grid[nx] or {}
-    c = c + (row[ny] or 0)
+  for dx = -1, 1 do
+    for dy = -1, 1 do
+      if not (dx == 0 and dy == 0) then
+        c = c + get_cell(x + dx, y + dy)
+      end
+    end
   end
   return c
 end
 
-function countAliveNeighbors(x, y)
-  local count = 0
-  for dx = -1, 1 do
-    for dy = -1, 1 do
-      if dx ~= 0 or dy ~= 0 then
-        local nx, ny = x + dx, y + dy
-        count = count + countHelper(nx, ny)
-      end
-    end
-  end
-  return count
-end
-
-local function updateGrid()
-  local newGrid = {}
-  for x = 1, grid_w do
-    newGrid[x] = {}
-    for y = 1, grid_h do
-      local neighbors = countAliveNeighbors(x, y)
-      if grid[x][y] == 1 then
-        newGrid[x][y] =
-            (neighbors == 2 or neighbors == 3) and 1 or 0
+local function step_grid()
+  for x = 1, S.gw do
+    for y = 1, S.gh do
+      local n = alive_neighbors(x, y)
+      local v = S.grid[x][y]
+      if v == 1 then
+        S.next[x][y] = (n == 2 or n == 3) and 1 or 0
       else
-        newGrid[x][y] = (neighbors == 3) and 1 or 0
+        S.next[x][y] = (n == 3) and 1 or 0
       end
     end
   end
-  grid = newGrid
+  S.grid, S.next = S.next, S.grid
 end
 
-function changeSpeed(d)
+local function try_step(dt)
+  S.t = S.t + dt
+  local need = 1 / clamp(S.speed, SPEED_MIN, SPEED_MAX)
+  if S.t >= need then
+    S.t = S.t - need
+    step_grid()
+  end
+end
+
+local function change_speed(d)
   if not d then return end
-  if d < 0 and 1 < speed then
-    speed = speed - 1
-  end
-  if 0 < d and speed < 99 then
-    speed = speed + 1
-  end
+  S.speed = clamp(S.speed + d, SPEED_MIN, SPEED_MAX)
 end
 
+local function draw_cell(x, y)
+  local px = (x - 1) * CELL
+  local py = (y - 1) * CELL
+  G.setColor(0.9, 0.9, 0.9)
+  G.rectangle("fill", px, py, CELL, CELL)
+  G.setColor(0.3, 0.3, 0.3)
+  G.rectangle("line", px, py, CELL, CELL)
+end
+
+local function draw_help()
+  local btm = S.h - MARGIN
+  local right = S.w - MARGIN
+  local msg_r = "Reset: [r] key or long press"
+  local msg_s = "Speed: [+]/[-] or drag up/down"
+  G.print(msg_r, MARGIN, (btm - S.fh) - S.fh)
+  G.print(msg_s, MARGIN, btm - S.fh)
+  local label = string.format("Speed: %02d", S.speed)
+  local lw = S.font:getWidth(label)
+  G.print(label, right - lw, btm - S.fh)
+end
+
+-- ----------  init hook ----------
+local function ensure_init()
+  if S.inited then return end
+  math.randomseed(os.time())
+  init_dims()
+  new_font()
+  init_grid()
+  S.inited = true
+end
+
+-- ---------- LÖVE callbacks ----------
 function love.update(dt)
-  time = time + dt
+  ensure_init()
   if love.mouse.isDown(1) then
-    hold_time = hold_time + dt
+    S.hold_dt = S.hold_dt + dt
   end
-  if tick() then
-    updateGrid()
+  try_step(dt)
+end
+
+function love.draw()
+  ensure_init()
+  for x = 1, S.gw do
+    for y = 1, S.gh do
+      if S.grid[x][y] == 1 then
+        draw_cell(x, y)
+      end
+    end
   end
+  G.setColor(1, 1, 1, 0.5)
+  draw_help()
 end
 
 function love.keypressed(k)
+  ensure_init()
   if k == "r" then
-    init()
-  end
-  if k == "-" then
-    changeSpeed(-1)
-  end
-  if k == "+" or k == "=" then
-    changeSpeed(1)
+    init_grid()
+  elseif k == "-" then
+    change_speed(-1)
+  elseif k == "+" or k == "=" then
+    change_speed(1)
   end
 end
 
 function love.mousepressed(_, y, button)
+  ensure_init()
   if button == 1 then
-    mouse_held = true
-    hold_y = y
+    S.hold_y = y
+    S.hold_dt = 0
   end
 end
 
 function love.mousereleased(_, y, button)
-  if button == 1 then
-    mouse_held = false
-    if reset_time < hold_time then
-      init()
-    else
-      if hold_y then
-        local dy = hold_y - y
-        if math.abs(dy) > epsilon then
-          changeSpeed(dy)
-        end
-      end
-    end
-    hold_y = nil
-    hold_time = 0
-  end
-end
-
-function drawHelp()
-  local bottom = screen_h - margin
-  local right_edge = screen_w - margin
-  local reset_msg = "Reset: [r] key or long press"
-  local speed_msg = "Set speed: [+]/[-] key or drag up/down"
-  G.print(reset_msg, margin, (bottom - fh) - fh)
-  G.print(speed_msg, margin, bottom - fh)
-  local speed_label = string.format("Speed: %02d", speed)
-  local label_w = font:getWidth(speed_label)
-  G.print(speed_label, right_edge - label_w, bottom - fh)
-end
-
-function drawCell(x, y)
-  G.setColor(.9, .9, .9)
-  G.rectangle('fill',
-    (x - 1) * cell_size,
-    (y - 1) * cell_size,
-    cell_size, cell_size)
-  G.setColor(.3, .3, .3)
-
-  G.rectangle('line',
-    (x - 1) * cell_size,
-    (y - 1) * cell_size,
-    cell_size, cell_size)
-end
-
-function love.draw()
-  for x = 1, grid_w do
-    for y = 1, grid_h do
-      if grid[x][y] == 1 then
-        drawCell(x, y)
+  ensure_init()
+  if button ~= 1 then return end
+  if S.hold_dt >= HOLD_RST then
+    init_grid()
+  else
+    if S.hold_y then
+      local dy = S.hold_y - y
+      if math.abs(dy) > EPSILON then
+        change_speed(dy)
       end
     end
   end
-
-  G.setColor(1, 1, 1, 0.5)
-  drawHelp()
+  S.hold_y = nil
+  S.hold_dt = 0
 end
-
-math.randomseed(os.time())
-initializeGrid()
