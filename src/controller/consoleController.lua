@@ -35,13 +35,11 @@ function ConsoleController.new(M, main_ctrl)
   local config = M.cfg
   pre_env.font = config.view.font
   local IC = UserInputController(M.input)
-  local EC = EditorController(M.editor)
   local self = setmetatable({
     time        = 0,
     model       = M,
     main_ctrl   = main_ctrl,
     input       = IC,
-    editor      = EC,
     -- console runner env
     main_env    = env,
     -- copy of the application's env before the prep
@@ -58,6 +56,9 @@ function ConsoleController.new(M, main_ctrl)
 
     cfg         = config
   }, ConsoleController)
+  --- the editor has to know about us
+  local EC = EditorController(M.editor, self)
+  self.editor = EC
   -- initialize the stub env tables
   ConsoleController.prepare_env(self)
   ConsoleController.prepare_project_env(self)
@@ -66,8 +67,10 @@ function ConsoleController.new(M, main_ctrl)
 end
 
 --- @param V ConsoleView
-function ConsoleController:set_view(V)
+function ConsoleController:init_view(V)
   self.view = V
+  self.input:init_view(V.input)
+  self.input:update_view()
 end
 
 --- @param name string
@@ -88,21 +91,25 @@ end
 --- @return boolean success
 --- @return string? errmsg
 local function run_user_code(f, cc, project_path)
-  local G = love.graphics
+  local gfx = love.graphics
   local output = cc.model.output
   local env = cc:get_base_env()
 
-  G.setCanvas(cc:get_canvas())
+  gfx.setCanvas(cc:get_canvas())
   local ok, call_err
   if project_path then
     env = cc:get_project_env()
   end
   ok, call_err = pcall(f)
   if project_path and ok then -- user project exec
+    if love.PROFILE then
+      love.PROFILE.frame = 0
+      love.PROFILE.report = {}
+    end
     cc.main_ctrl.set_user_handlers(env['love'])
   end
   output:restore_main()
-  G.setCanvas()
+  gfx.setCanvas()
   if not ok then
     local msg = LANG.get_call_error(call_err)
     return false, msg
@@ -194,10 +201,11 @@ local function project_require(cc, name)
     local pr_env = cc:get_project_env()
     if chunk then
       setfenv(chunk, pr_env)
-      chunk()
+      return chunk()
     else
       --- hack around love.js not having the bit lib
       if name == 'bit' and _G.web then
+        ---@diagnostic disable-next-line: inject-field
         pr_env.bit = o_require('util.luabit')
       end
     end
@@ -209,7 +217,7 @@ end
 
 function ConsoleController.prepare_env(cc)
   local prepared            = cc.main_env
-  prepared.G                = love.graphics
+  prepared.gfx              = love.graphics
 
   local P                   = cc.model.projects
 
@@ -319,6 +327,28 @@ function ConsoleController.prepare_env(cc)
     cc:run_project(name)
   end
 
+  local terminal            = cc.model.output.terminal
+  local compy_namespace     = {
+    terminal = {
+      --- @param x number
+      --- @param y number
+      gotoxy = function(x, y)
+        return terminal:move_to(x, y)
+      end,
+      show_cursor = function()
+        return terminal:show_cursor()
+      end,
+      hide_cursor = function()
+        return terminal:hide_cursor()
+      end,
+      clear = function()
+        return terminal:clear()
+      end
+    }
+  }
+  prepared.compy            = compy_namespace
+  prepared.tty              = compy_namespace.terminal
+
   prepared.run              = prepared.run_project
 
   prepared.eval             = LANG.eval
@@ -343,7 +373,7 @@ function ConsoleController.prepare_project_env(cc)
   local cfg                   = cc.model.cfg
   ---@type table
   local project_env           = cc:get_pre_env_c()
-  project_env.G               = love.graphics
+  project_env.gfx             = love.graphics
 
   project_env.require         = function(name)
     return project_require(cc, name)
@@ -371,7 +401,7 @@ function ConsoleController.prepare_project_env(cc)
     close_project(cc)
   end
 
-  local ui_model, input_ref
+  local ui_model, ui_con, input_ref
   local create_input_handle   = function()
     input_ref = table.new_reftable()
   end
@@ -387,10 +417,13 @@ function ConsoleController.prepare_project_env(cc)
     if not input_ref then return end
     ui_model = UserInputModel(cfg, eval, true, prompt)
     ui_model:set_text(init)
-    local inp_con = UserInputController(ui_model, input_ref)
-    local view = UserInputView(cfg.view, inp_con)
+    ui_con = UserInputController(ui_model, input_ref, true)
+    local view = UserInputView(cfg.view, ui_con)
+    ui_con:init_view(view)
+    ui_con:update_view()
+
     love.state.user_input = {
-      M = ui_model, C = inp_con, V = view
+      M = ui_model, C = ui_con, V = view
     }
     return input_ref
   end
@@ -417,6 +450,7 @@ function ConsoleController.prepare_project_env(cc)
       return
     end
     ui_model:set_text(content)
+    ui_con:update_view()
   end
 
   --- @param filters table
@@ -544,22 +578,32 @@ function ConsoleController:_set_base_env(t)
   table.protect(t)
 end
 
---- @param msg string?
-function ConsoleController:suspend_run(msg)
-  local runner_env = self:get_project_env()
-  if love.state.app_state ~= 'running' then
+function ConsoleController:suspend()
+  if love.state.app_state ~= 'snapshot' then
     return
   end
+  local runner_env = self:get_project_env()
   Log.info('Suspending project run')
   love.state.app_state = 'inspect'
+  local msg = love.state.suspend_msg
   if msg then
     self.input:set_error({ tostring(msg) })
+    love.state.suspend_msg = nil
   end
 
   self.model.output:invalidate_terminal()
 
   self.main_ctrl.save_user_handlers(runner_env['love'])
   self.main_ctrl.set_default_handlers(self, self.view)
+end
+
+--- @param msg string?
+function ConsoleController:suspend_run(msg)
+  if love.state.app_state ~= 'running' then
+    return
+  end
+  love.state.app_state = 'snapshot'
+  love.state.suspend_msg = msg
 end
 
 --- @param name string
@@ -588,6 +632,7 @@ function ConsoleController:open_project(name, play)
     then
       table.insert(package.loaders, 1, project_loader)
     end
+    love.state.app_state = 'project_open'
   end
   if open then
     print('Project ' .. name .. ' opened')
@@ -626,6 +671,7 @@ function ConsoleController:stop_project_run()
   View.clear_snapshot()
   self.main_ctrl.set_love_draw(self, self.view)
   self.main_ctrl.clear_user_handlers()
+  self.main_ctrl.report()
   love.state.app_state = 'project_open'
 end
 
@@ -655,14 +701,22 @@ function ConsoleController:edit(name, state)
   if ex then
     text = self:_readfile(filename)
   end
-  love.state.prev_state = love.state.app_state
-  love.state.app_state = 'editor'
+
+  if love.state.app_state ~= 'editor' then
+    love.state.prev_state = love.state.app_state
+    love.state.app_state = 'editor'
+  end
   local save = function(newcontent)
     return self:_writefile(filename, newcontent)
   end
 
   self.editor:open(filename, text, save)
   self.editor:restore_state(state)
+end
+
+--- @return EditorState?
+function ConsoleController:close_buffer()
+  self.editor:close_buffer()
 end
 
 --- @return EditorState?
@@ -673,6 +727,7 @@ function ConsoleController:finish_edit()
   if ok then
     love.state.app_state = love.state.prev_state
     love.state.prev_state = nil
+    --- TODO clear bufferlist
     return self.editor:get_state()
   else
     print(err)
@@ -769,11 +824,13 @@ function ConsoleController:keypressed(k)
       end
     end
   end
+  input:update_view()
 end
 
 --- @param k string
 function ConsoleController:keyreleased(k)
   self.input:keyreleased(k)
+  self.input:update_view()
 end
 
 --- @param x integer

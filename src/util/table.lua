@@ -98,6 +98,36 @@ function table.protect(t, fields)
   return t, orig
 end
 
+--- Log set operations
+--- @param t table
+--- @param fields? table
+--- @return table prepared
+--- @return table original
+function table.logset(t, fields)
+  local orig = t
+  local proxy = {}
+
+  setmetatable(proxy, {
+    __newindex = function(_, k, v)
+      if not fields then
+        Log(string.format("%s = %s", k, v))
+      else
+        local fs = {}
+        for _, f in ipairs(fields) do
+          fs[f] = f
+        end
+        if fs[k] then
+          Log(string.format("%s = %s", k, v))
+        end
+      end
+      orig[k] = v
+    end,
+  })
+  -- getmetatable(proxy).__metatable = 'no-no'
+  t = proxy
+  return t, orig
+end
+
 --- @diagnostic disable-next-line: duplicate-set-field
 function table.pack(...)
   --- @class t
@@ -281,6 +311,17 @@ function table.find_by(self, pred)
   end
 end
 
+--- Find first element that the predicate holds for
+--- @param self table[]
+--- @param pred function
+--- @return any?
+function table.find_by_v(self, pred)
+  if not self or not pred then return end
+  for _, v in pairs(self) do
+    if pred(v) then return v end
+  end
+end
+
 --- Filter elements that satisfy the predicate
 --- enumerates sequentially
 --- @param self table[]
@@ -349,6 +390,30 @@ function table.map(self, f)
   local ret = {}
   for k, v in pairs(self) do
     ret[k] = f(v)
+  end
+  return ret
+end
+
+--- Tabulate array values with index (returns new table)
+--- @param self table
+--- @param f function
+--- @return table
+function table.imap(self, f)
+  local ret = {}
+  for i, v in ipairs(self) do
+    ret[i] = f(v, i)
+  end
+  return ret
+end
+
+--- Create a table of `n` elements by running `f`
+--- @param n integer
+--- @param f function
+--- @return table
+function table.fill(n, f)
+  local ret = {}
+  for i = 1, n do
+    ret[i] = f()
   end
   return ret
 end

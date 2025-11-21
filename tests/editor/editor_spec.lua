@@ -25,17 +25,6 @@ describe('Editor #editor', function()
     'Turtle graphics game inspired the LOGO family of languages.',
     '',
   }
-  --- @param w integer
-  --- @param l integer?
-  local function getMockConf(w, l)
-    return {
-      view = {
-        drawableChars = w,
-        lines = l or 16,
-        input_max = 14
-      },
-    }
-  end
 
   --- @param cfg Config
   --- @return EditorController
@@ -75,7 +64,7 @@ describe('Editor #editor', function()
   describe('opens', function()
     it('no wrap needed', function()
       local w = 80
-      local controller = wire(getMockConf(w))
+      local controller = wire(TU.mock_view_cfg(w))
 
       local save = TU.get_save_function(turtle_doc)
       controller:open('turtle', turtle_doc, save)
@@ -100,8 +89,7 @@ describe('Editor #editor', function()
       local w = 16
       love.state.app_state = 'editor'
 
-      local controller, press = wire(getMockConf(w))
-      local model = controller.model
+      local controller, press = wire(TU.mock_view_cfg(w))
 
       local save = TU.get_save_function(turtle_doc)
 
@@ -130,7 +118,7 @@ describe('Editor #editor', function()
         assert.same(start_sel - 1, buffer:get_selection())
         mock.keystroke('up', press)
         assert.same(start_sel - 2, buffer:get_selection())
-        assert.same(turtle_doc[2], model.buffer:get_selected_text())
+        assert.same(turtle_doc[2], buffer:get_selected_text())
         --- load it
         local input = function()
           return controller.input:get_text():items()
@@ -184,16 +172,17 @@ describe('Editor #editor', function()
     describe('with scroll', function()
       local l = 6
 
-      local controller, _, view = wire(getMockConf(80, l))
+      local controller, _, view = wire(TU.mock_view_cfg(80, l))
       local model = controller.model
 
       local save = TU.get_save_function(sierpinski)
       --- use it as plaintext for this test
       controller:open('sierpinski.txt', sierpinski, save)
-      view.buffer:open(model.buffer)
+      local buf = controller:get_active_buffer()
+      local bv = view:open(buf)
 
-      local visible = view.buffer.content
-      local scroll = view.buffer.SCROLL_BY
+      local visible = bv.content
+      local scroll = bv.SCROLL_BY
 
       local off = #sierpinski - l + 1
       local start_range = Range(off + 1, #sierpinski + 1)
@@ -201,7 +190,7 @@ describe('Editor #editor', function()
       it('loads', function()
         --- inital scroll is at EOF, meaning last l lines are visible
         --- plus the phantom line
-        assert.same(off, view.buffer.offset)
+        assert.same(off, bv:get_offset())
         assert.same(start_range, visible.range)
       end)
       local base = Range(1, l)
@@ -237,8 +226,7 @@ describe('Editor #editor', function()
     describe('with scroll and wrap', function()
       local l = 6
 
-      local controller, _, view = wire(getMockConf(27, l))
-      local model = controller.model
+      local controller, _, view = wire(TU.mock_view_cfg(27, l))
 
       local save = TU.get_save_function(sierpinski)
       controller:open('sierpinski.txt', sierpinski, save)
@@ -249,11 +237,11 @@ describe('Editor #editor', function()
 
       local buffer = controller:get_active_buffer()
       --- @type BufferView
-      local bv = view.buffer
-      bv:open(model.buffer)
+      local bv = view:open(buffer)
+      -- bv:open(buffer)
 
-      local visible = view.buffer.content
-      local scroll = view.buffer.SCROLL_BY
+      local visible = bv.content
+      local scroll = bv.SCROLL_BY
 
       local clen = visible:get_content_length()
       local off = clen - l + 1
@@ -261,7 +249,7 @@ describe('Editor #editor', function()
       it('loads', function()
         --- inital scroll is at EOF, meaning last l lines are visible
         --- plus the phantom line
-        assert.same(off, view.buffer.offset)
+        assert.same(off, bv:get_offset())
         assert.same(start_range, visible.range)
       end)
       local base = Range(1, l)
@@ -439,9 +427,7 @@ describe('Editor #editor', function()
   --- end plaintext
 
   describe('structured (lua) works', function()
-    local l = 16
-
-    local controller, press = wire(getMockConf(64, l))
+    local controller, press = wire(TU.mock_view_cfg())
     local save, savefile = TU.get_save_function(sierpinski)
 
     controller:open('sierpinski.lua', sierpinski, save)

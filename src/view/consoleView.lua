@@ -8,12 +8,12 @@ require("util.color")
 require("util.view")
 require("util.debug")
 
-local G = love.graphics
+local gfx = love.graphics
 
 --- @param cfg Config
 --- @param ctrl ConsoleController
 local function new(cfg, ctrl)
-  return {
+  local self = {
     title = TitleView,
     canvas = CanvasView(cfg.view),
     input = UserInputView(cfg.view, ctrl.input),
@@ -22,6 +22,9 @@ local function new(cfg, ctrl)
     cfg = cfg,
     drawable_height = ViewUtils.get_drawable_height(cfg.view),
   }
+  --- hook the view in the controller
+  ctrl:init_view(self)
+  return self
 end
 
 --- @class ConsoleView
@@ -36,9 +39,8 @@ ConsoleView = class.create(new)
 
 --- @param terminal table
 --- @param canvas love.Canvas
---- @param input InputDTO
 --- @param snapshot love.Image?
-function ConsoleView:draw(terminal, canvas, input, snapshot)
+function ConsoleView:draw(terminal, canvas, snapshot)
   if love.DEBUG then
     self:draw_placeholder()
   end
@@ -50,11 +52,7 @@ function ConsoleView:draw(terminal, canvas, input, snapshot)
       self.drawable_height, snapshot)
 
     if ViewUtils.conditional_draw('show_input') then
-      local time = nil
-      if self.cfg.view.show_debug_timer then
-        time = self.controller:get_timestamp()
-      end
-      self.input:draw(input, time)
+      self.input:draw()
     end
   end
 
@@ -73,15 +71,15 @@ function ConsoleView:draw_placeholder()
   local band = self.cfg.view.fh
   local w    = self.cfg.view.w
   local h    = self.cfg.view.h
-  G.push('all')
-  G.setColor(Color[Color.yellow])
+  gfx.push('all')
+  gfx.setColor(Color[Color.yellow])
   for o = -h, w, 2 * band do
-    G.polygon("fill"
+    gfx.polygon("fill"
     , o + 0, h
     , o + h, 0
     , o + h + band, 0
     , o + band, h
     )
   end
-  G.pop()
+  gfx.pop()
 end
