@@ -413,7 +413,14 @@ return function(lib)
           get_comments(single_comment, 'first')
         end
 
-        if not single and ret:last().tag ~= 'empty' then
+        if
+            ret:last().tag ~= 'empty' and (
+              --- no empty line at EOF
+              not single
+              --- there is an empty line at the end
+              or single and (#string.lines(text) > last)
+            )
+        then
           ret:push_back(Empty(last + 1 - of))
         end
         return true, ret, r
@@ -422,7 +429,7 @@ return function(lib)
         return false, Dequeue(text, 'string'), r
       end
     else
-      return true, Dequeue({Empty(1)}, 'block'), r
+      return true, Dequeue({ Empty(1) }, 'block'), r
     end
   end
 
