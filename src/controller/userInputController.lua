@@ -1,5 +1,6 @@
 local class = require('util.class')
 require("util.key")
+require("util.view")
 require("util.string.string")
 
 --- @param model UserInputModel

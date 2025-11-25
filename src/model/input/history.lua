@@ -96,7 +96,9 @@ function History:_get_entries()
   return self:items()
 end
 
+
 --- For debug purposes, log content
+--- @private
 --- @param f function
 function History:_dump(f)
   local log = f or Log.debug
@@ -106,5 +108,5 @@ function History:_dump(f)
   end)
   local i = self.index or '-'
   local l = ' [' .. self:length() .. '] '
-  log(i .. l .. Debug.text_table(t, false, nil, 64)  )
+  log(i .. l .. Debug.text_table(t, false, nil, 64))
 end
