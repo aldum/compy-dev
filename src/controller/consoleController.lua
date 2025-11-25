@@ -720,11 +720,11 @@ function ConsoleController:edit(name, state)
   local PS = self.model.projects
   local p  = PS.current
   local filename
-  if state and state.buffer then
-    filename = state.buffer.filename
-  else
+  -- if state and state.buffer then
+  --   filename = state.buffer.filename
+  -- else
     filename = name or ProjectService.MAIN
-  end
+  -- end
   local fpath = p:get_path(filename)
   local ex    = FS.exists(fpath)
   local text
