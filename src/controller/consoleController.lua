@@ -10,6 +10,13 @@ require("util.key")
 require("util.table")
 local TerminalTest = require("util.test_terminal")
 
+local messages = {
+  file_does_not_exist = function(name)
+    local n = name or ''
+    return 'cannot open ' .. n .. ': No such file or directory'
+  end,
+}
+
 --- @class ConsoleController
 --- @field time number
 --- @field model Model
@@ -217,15 +224,30 @@ local function project_require(cc, name)
   end
 end
 
+_G.o_dofile = _G.dofile
+--- @param cc ConsoleController
+--- @param filename string
+local function project_dofile(cc, filename)
+  local P = cc.model.projects
+  local fn = filename
+  local open = P.current
+  if open then
+    local chunk = open:load_file(fn)
+    local pr_env = cc:get_project_env()
+    if chunk then
+      setfenv(chunk, pr_env)
+      return true, chunk()
+    else
+      print(messages.file_does_not_exist(filename))
+    end
+  end
+end
+
 function ConsoleController.prepare_env(cc)
   local prepared            = cc.main_env
   prepared.gfx              = love.graphics
 
   local P                   = cc.model.projects
-
-  prepared.require          = function(name)
-    return project_require(cc, name)
-  end
 
   --- @param f function
   local check_open_pr       = function(f, ...)
@@ -234,6 +256,16 @@ function ConsoleController.prepare_env(cc)
     else
       return f(...)
     end
+  end
+
+  prepared.dofile           = function(name)
+    return check_open_pr(function()
+      return project_dofile(cc, name)
+    end)
+  end
+
+  prepared.require          = function(name)
+    return project_require(cc, name)
   end
 
   prepared.list_projects    = function()
