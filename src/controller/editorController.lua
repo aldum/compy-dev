@@ -116,6 +116,7 @@ function EditorController:pop_buffer()
   bs:pop_front()
   local b = bs:first()
   self.view:get_current_buffer():open(b)
+  self:update_status()
 end
 
 function EditorController:close_buffer()
@@ -267,9 +268,9 @@ function EditorController:_generate_status(sel)
   local ct = bufview.content_type
   if ct == 'lua' then
     local range = bufview.content:get_block_app_pos(sel)
-    cs = CustomStatus(ct, len, more, sel, m, range)
+    cs = CustomStatus(buffer.name, ct, len, more, sel, m, range)
   else
-    cs = CustomStatus(ct, len, more, sel, m)
+    cs = CustomStatus(buffer.name, ct, len, more, sel, m)
   end
 
   return cs
