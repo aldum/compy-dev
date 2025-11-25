@@ -235,13 +235,11 @@ function EditorController:restore_state(state)
   end
 end
 
---- @return string name
---- @return Dequeue content
+--- @return {name: string, content: string[]}[]
 function EditorController:close()
-  local buf = self:get_active_buffer()
   self.input:clear()
-  local content = buf:get_text_content()
-  return buf.name, content
+  --- TODO is this even needed?
+  return self.model:get_buffers_content()
 end
 
 --- @return BufferModel

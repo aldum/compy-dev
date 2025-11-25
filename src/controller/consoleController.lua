@@ -729,16 +729,26 @@ end
 --- @return EditorState?
 function ConsoleController:finish_edit()
   self.editor:save_state()
-  local name, newcontent = self.editor:close()
-  local ok, err = self:_writefile(name, newcontent)
+  self.editor:close()
+  local ok = true
+  local errs = {}
+  -- local bfs = self.editor:close()
+  -- for _, bc in ipairs(bfs) do
+  --   local name, newcontent = bc.name, bc.content
+  --   local bok, err = self:_writefile(name, newcontent)
+  --   if not bok then
+  --     ok = false
+  --     table.insert(errs, err)
+  --   end
+  -- end
   if ok then
     love.state.app_state = love.state.prev_state
     love.state.prev_state = nil
-    --- TODO clear bufferlist
-    return self.editor:get_state()
   else
-    print(err)
+    print(string.unlines(errs))
   end
+  self.buffers = {}
+  return self.editor:get_state()
 end
 
 --- Handlers ---
