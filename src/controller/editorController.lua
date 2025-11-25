@@ -69,7 +69,7 @@ function EditorController:open(name, content, save)
       return parser.trunc(code, self.model.cfg.view.fold_lines)
     end
   elseif is_md then
-    local mdEval = MdEval(name)
+    local mdEval = MdEval()
     hl = mdEval.highlighter
     self.input:set_eval(mdEval)
   else
