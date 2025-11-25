@@ -201,15 +201,17 @@ end
 _G.o_dofile = _G.dofile
 --- @param cc ConsoleController
 --- @param filename string
-local function project_dofile(cc, filename)
+--- @param env LuaEnv?
+local function project_dofile(cc, filename, env)
   local P = cc.model.projects
   local fn = filename
   local open = P.current
   if open then
     local chunk = open:load_file(fn)
-    local pr_env = cc:get_project_env()
     if chunk then
-      setfenv(chunk, pr_env)
+      if env then
+        setfenv(chunk, env)
+      end
       return true, chunk()
     else
       print(messages.file_does_not_exist(filename))
@@ -380,7 +382,7 @@ function ConsoleController.prepare_project_env(cc)
   project_env.gfx             = love.graphics
 
   project_env.dofile          = function(name)
-    return project_dofile(cc, name)
+    return project_dofile(cc, name, cc:get_project_env())
   end
 
   --- @param msg string?
