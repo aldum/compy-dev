@@ -768,6 +768,11 @@ function ConsoleController:keypressed(k)
 
   local function terminal_test()
     local out = self.model.output
+    if love.state.app_state ~= 'ready'
+        or love.state.app_state ~= 'project_open'
+    then
+      return
+    end
     if not love.state.testing then
       love.state.testing = 'running'
       input:cancel()
