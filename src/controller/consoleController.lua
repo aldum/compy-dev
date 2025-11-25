@@ -178,7 +178,7 @@ function ConsoleController:run_project(name)
   end
 
   if ok then
-    local runner_env        = self:get_project_env()
+    local runner_env = self:get_project_env()
     local f, load_err, path = P:run(name, runner_env)
     if f then
       local n = name or P.current.name or 'project'
@@ -195,32 +195,6 @@ function ConsoleController:run_project(name)
       --- TODO extract error message here
       print(load_err)
     end
-  end
-end
-
-_G.o_require = _G.require
---- @param cc ConsoleController
---- @param name string
-local function project_require(cc, name)
-  local P = cc.model.projects
-  local fn = name .. '.lua'
-  local open = P.current
-  if open then
-    local chunk = open:load_file(fn)
-    local pr_env = cc:get_project_env()
-    if chunk then
-      setfenv(chunk, pr_env)
-      return chunk()
-    else
-      --- hack around love.js not having the bit lib
-      if name == 'bit' and _G.web then
-        ---@diagnostic disable-next-line: inject-field
-        pr_env.bit = o_require('util.luabit')
-      end
-    end
-    --- TODO: is it desirable to allow out-of-project require?
-    -- else
-    -- _require(name)
   end
 end
 
@@ -262,10 +236,6 @@ function ConsoleController.prepare_env(cc)
     return check_open_pr(function()
       return project_dofile(cc, name)
     end)
-  end
-
-  prepared.require          = function(name)
-    return project_require(cc, name)
   end
 
   prepared.list_projects    = function()
@@ -409,8 +379,8 @@ function ConsoleController.prepare_project_env(cc)
   local project_env           = cc:get_pre_env_c()
   project_env.gfx             = love.graphics
 
-  project_env.require         = function(name)
-    return project_require(cc, name)
+  project_env.dofile          = function(name)
+    return project_dofile(cc, name)
   end
 
   --- @param msg string?
@@ -654,19 +624,13 @@ function ConsoleController:open_project(name, play)
     self:close_project()
   end
 
+  local env = self:get_project_env()
   local open, create, err = P:opreate(name, play)
   local ok = open or create
   if ok then
-    local project_loader = (function()
-      local cached = self.loaders[name]
-      if cached then
-        return cached
-      else
-        local loader = P.current:get_loader()
-        self:cache_loader(name, loader)
-        return loader
-      end
-    end)()
+    local project_loader = P.current:get_loader(env)
+    self:cache_loader(name, project_loader)
+
     if not table.is_member(package.loaders, project_loader)
     then
       table.insert(package.loaders, 1, project_loader)
