@@ -495,6 +495,7 @@ local error = function(...)
   printer(s)
 end
 local debug = function(...)
+  if not love.DEBUG then return end
   local args = { ... }
   local ts = string.format("%.3f ", os.clock())
   local s = annot(ts .. 'DEBUG ',
