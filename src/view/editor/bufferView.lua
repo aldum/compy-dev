@@ -204,7 +204,7 @@ end
 
 --- @param ln integer
 function BufferView:scroll_to_line(ln)
-  local off = self.content.wrap_forward[ln][1]
+  local off = self.content.wrap_forward[ln][1] or 0
   self:scroll_to(off)
 end
 
