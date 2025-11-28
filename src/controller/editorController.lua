@@ -69,7 +69,7 @@ function EditorController:open(name, content, save)
       return parser.trunc(code, self.model.cfg.view.fold_lines)
     end
   elseif is_md then
-    local mdEval = MdEval(name)
+    local mdEval = MdEval()
     hl = mdEval.highlighter
     self.input:set_eval(mdEval)
   else
@@ -239,8 +239,11 @@ end
 --- @return {name: string, content: string[]}[]
 function EditorController:close()
   self.input:clear()
-  --- TODO is this even needed?
-  return self.model:get_buffers_content()
+  local bfs = self.model:get_buffers_content()
+  self.model.buffers = Dequeue()
+  self.view.buffers = {}
+  --- TODO is this needed?
+  return bfs
 end
 
 --- @return BufferModel
@@ -328,19 +331,9 @@ function EditorController:_handle_submit(go)
       local sel = buf:get_selection()
       local block = buf:get_content():get(sel)
       if not block then return end
-      --- TODO: why did I do this?
-      -- local ln = block.pos.start
-      -- if ln then go({ Empty(ln) }) end
     else
-      local pretty = buf.printer(raw)
-      if pretty then
-        inter:set_text(pretty)
-      else
-        --- fallback to original in case of unparse-able input
-        pretty = raw
-      end
       local ok, res = inter:evaluate()
-      local _, chunks = buf.chunker(pretty, true)
+      local _, chunks = buf.chunker(raw, true)
       if ok then
         go(chunks)
       else
