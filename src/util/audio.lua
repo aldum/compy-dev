@@ -24,7 +24,7 @@ local names = {
   "wrong"
 }
 for _,name in pairs(names) do
-  local filename = "assets/sounds/"..name..".wav"
+  local filename = "assets/sounds/"..name..".ogg"
   local source = love.audio.newSource(filename, "static")
   audio[name] = function()
     love.audio.play(source)
