@@ -20,7 +20,6 @@ local function render_blocks(blocks)
       ret:append_all(v.lines)
     end
   end
-  ret:append('')
   return ret
 end
 
@@ -28,16 +27,22 @@ end
 --- @alias Content Dequeue<string>|Dequeue<Block>
 
 --- @param name string
---- @param content string
+--- @param content str
 --- @param save function
 --- @param chunker Chunker?
 --- @param highlighter Highlighter?
---- @param printer function?
+--- @param printer Printer?
+--- @param truncer function?
 --- @return BufferModel?
-local function new(name, content, save,
-                   chunker, highlighter, printer)
+local function new(
+    name,
+    content,
+    save,
+    chunker,
+    highlighter,
+    printer,
+    truncer)
   local _content, sel, ct, semantic
-  local revmap = {}
   local readonly = false
 
   local lines = string.lines(content or '')
@@ -45,27 +50,19 @@ local function new(name, content, save,
   local function plaintext()
     ct = 'plain'
     _content = Dequeue(lines, 'string')
-    sel = #_content + 1
+    if _content:last() ~= '' then
+      _content:push('')
+    end
+    sel = #_content
   end
   --- only passing this around so the linter shuts up about nil
   --- @param chk function
   local function luacontent(chk)
     ct = 'lua'
-    local ok, blocks, ast = chk(lines)
+    local ok, blocks = chk(lines)
     if ok then
       local len = #blocks
-      sel = len + 1
-      local anaok, ana = pcall(analyzer.analyze, ast)
-      if anaok then
-        for bi, v in ipairs(blocks) do
-          if (v.pos) then
-            for _, l in ipairs(v.pos:enumerate()) do
-              revmap[l] = bi
-            end
-          end
-        end
-        semantic = bsi.convert(ana, revmap)
-      end
+      sel = len
     else
       readonly = true
       sel = 1
@@ -82,7 +79,7 @@ local function new(name, content, save,
     plaintext()
   end
 
-  return {
+  local self = {
     name = name or 'untitled',
     content = _content,
     content_type = ct,
@@ -90,13 +87,23 @@ local function new(name, content, save,
     chunker = chunker,
     highlighter = highlighter,
     printer = printer,
+    truncer = truncer,
+    revmap = {},
     semantic = semantic,
     selection = sel,
     readonly = readonly
   }
+  local id = tostring(self):gsub('table: ', '')
+  self.id = id
+  return self
 end
 
---- @class BufferModel
+--- @param self BufferModel
+local function lateinit(self)
+  self:analyze()
+end
+
+--- @class BufferModel : Object
 --- @field name string
 --- @field content Dequeue -- Content
 --- @field content_type ContentType
@@ -105,17 +112,40 @@ end
 --- @field loaded integer?
 --- @field readonly boolean
 --- @field semantic BufferSemanticInfo?
+--- @field revmap table?
 ---
 --- @field chunker Chunker
 --- @field highlighter Highlighter
 --- @field printer Printer
+--- @field truncer function
 --- @field move_selection function
 --- @field get_selection function
 --- @field get_selected_text function
 --- @field delete_selected_text function
 --- @field replace_selected_text function
 --- @field get_text_content function
-BufferModel = class.create(new)
+BufferModel = class.create(new, lateinit)
+
+function BufferModel:get_id()
+  return self.id
+end
+
+function BufferModel:analyze()
+  if self.content_type ~= 'lua' then return end
+  local lines = string.lines(self:get_text_content())
+  local ok, blocks, ast = self.chunker(lines)
+  if not ok then return end
+  local anaok, ana = pcall(analyzer.analyze, ast)
+  if not anaok then return end
+  for bi, v in ipairs(blocks) do
+    if (v.pos) then
+      for _, l in ipairs(v.pos:enumerate()) do
+        self.revmap[l] = bi
+      end
+    end
+  end
+  self.semantic = bsi.convert(ana, self.revmap)
+end
 
 function BufferModel:rechunk()
   if self.content_type ~= 'lua' then return end
@@ -125,8 +155,9 @@ function BufferModel:rechunk()
 end
 
 function BufferModel:save()
-  self:highlight()
+  self:_text_change()
   local text = self:get_text_content()
+  self:analyze()
   return self.save_file(text)
 end
 
@@ -178,7 +209,7 @@ function BufferModel:move_selection(dir, by, warp, move)
   local l = self:get_content_length()
   local last = (function()
     if move then return l end
-    return l + 1
+    return l
   end)()
   if warp then
     if dir == 'up' then
@@ -215,7 +246,7 @@ function BufferModel:set_selection(sel)
 end
 
 --- Get index of selected line/block
---- @return integer
+--- @return integer blocknum
 function BufferModel:get_selection()
   return self.selection
 end
@@ -274,9 +305,12 @@ function BufferModel:_text_change(rechunk)
       self:rechunk()
       self:rechunk()
     end
-  end
-  if self.content_type == 'md' then
+  else
     self:highlight()
+    local ll = self.content:last()
+    if ll ~= '' then
+      self.content:push('')
+    end
   end
 end
 
@@ -286,13 +320,8 @@ function BufferModel:delete_selected_text()
     local sb = self.content[sel]
     if not sb then return end
 
-    local l = sb.pos:len()
     self.content:remove(sel)
-    for i = sel, self:get_content_length() do
-      local b = self.content[i]
-      local r = b.pos
-      b.pos = r:translate(-l)
-    end
+    self:rechunk()
   else
     self.content:remove(sel)
   end
@@ -310,6 +339,7 @@ function BufferModel:replace_selected_text(t)
       return false
     end
     local sel = self.selection
+    local rechunk = false
     --- content start and original length
     local cs, ol = (function()
       local current = self.content[sel]
@@ -339,6 +369,7 @@ function BufferModel:replace_selected_text(t)
         c.pos = nr
         self.content:insert(c, sel)
       end
+      rechunk = true
     end
     --- move subsequent chunks down
     local diff = chunks[n].pos:len() - ol
@@ -349,7 +380,7 @@ function BufferModel:replace_selected_text(t)
       end
     end
 
-    self:_text_change()
+    self:_text_change(rechunk)
     return true, n
   else
     local sel = self.selection

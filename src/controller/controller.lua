@@ -1,3 +1,4 @@
+Prof = require("controller.profiler")
 require("view.view")
 
 require("util.string.string")
@@ -8,6 +9,9 @@ local messages = {
   user_break = "BREAK into program",
   exit_anykey = "Press any key to exit.",
   exec_error = function(err)
+    Log.error((debug.traceback(
+      "Error: " .. tostring(err), 1):gsub("\n[^\n]+$", "")
+    ))
     return 'Execution error at ' .. err
   end
 }
@@ -39,10 +43,11 @@ local _supported = {
   'touchreleased',
 }
 
-local _C
+local _C, _mode
 
 --- @param msg string
 local function user_error_handler(msg)
+  Log.debug('user error: ' .. msg)
   local err = LANG.get_call_error(msg) or ''
   local user_msg = messages.exec_error(err)
   _C:suspend_run(user_msg)
@@ -56,15 +61,11 @@ end
 --- @return any ...
 local function wrap(f, ...)
   if _G.web then
-    -- local ok, r = pcall(f, ...)
-    -- if not ok then
-    --   user_error_handler(r)
-    -- end
-    -- return r
-    -- return xpcall(f, user_error_handler, ...)
-    --- TODO no error handling, sorry, it leads to a stack overflow
-    --- in love.wasm
-    return f(...)
+    local ok, r = pcall(f, ...)
+    if not ok then
+      user_error_handler(r)
+    end
+    return r
   else
     return xpcall(f, user_error_handler, ...)
   end
@@ -102,9 +103,15 @@ local set_handlers = function(userlove)
   end
 
   -- drawing - separate table
-  local draw = userlove.draw
-  if draw and draw ~= View.main_draw then
-    love.draw = draw
+  local udr = userlove.draw
+  local mdr = View.main_draw
+  if udr and udr ~= mdr then
+    --- @diagnostic disable-next-line: duplicate-set-field
+    local ndr = function()
+      udr()
+      View.drawFPS()
+    end
+    love.draw = ndr
     user_draw = true
   end
 end
@@ -167,6 +174,7 @@ Controller = {
         if love.DEBUG then
           if k == "1" then
             table.toggle(love.debug, 'show_terminal')
+            table.toggle(love.debug, 'show_buffer')
           end
           if k == "2" then
             table.toggle(love.debug, 'show_snapshot')
@@ -339,6 +347,9 @@ Controller = {
   --- @param C ConsoleController
   set_love_update = function(C)
     local function update(dt)
+      if love.PROFILE then
+        Prof.update()
+      end
       if click_timer > 0 then
         click_timer = click_timer - dt
       end
@@ -366,19 +377,22 @@ Controller = {
         end
         click_count = 0
       end
+
       local ddr = View.prev_draw
       local ldr = love.draw
-      local ui = get_user_input()
-      if ldr ~= ddr or ui then
-        local function draw()
+      if ldr ~= ddr then
+        local draw = function()
           if ldr then
+            gfx.push('all')
             wrap(ldr)
+            gfx.pop()
           end
-          local user_input = get_user_input()
-          if user_input then
-            user_input.V:draw(user_input.C:get_input(), C.time)
+          local ui = get_user_input()
+          if ui then
+            ui.V:draw()
           end
         end
+
         View.prev_draw = draw
         love.draw = draw
       end
@@ -389,7 +403,14 @@ Controller = {
       then
         wrap(uup, dt)
       end
-      Controller.snapshot()
+      if love.state.app_state == 'snapshot' then
+        gfx.captureScreenshot(function(img)
+          local snap = gfx.newImage(img)
+          View.snapshot = snap
+          C:suspend()
+        end)
+      end
+
       if love.harmony then
         love.harmony.timer_update(dt)
       end
@@ -410,17 +431,18 @@ Controller = {
   set_love_draw = function(C, CV)
     local function draw()
       View.draw(C, CV)
+      View.drawFPS()
     end
     love.draw = draw
 
     View.prev_draw = love.draw
     View.main_draw = love.draw
     View.end_draw = function()
-      local w, h = G.getDimensions()
-      G.setColor(Color[Color.white])
-      G.setFont(C.cfg.view.font)
-      G.clear()
-      G.printf(messages.exit_anykey, 0, h / 3, w, "center")
+      local w, h = gfx.getDimensions()
+      gfx.setColor(Color[Color.white])
+      gfx.setFont(C.cfg.view.font)
+      gfx.clear()
+      gfx.printf(messages.exit_anykey, 0, h / 3, w, "center")
     end
   end,
 
@@ -452,19 +474,13 @@ Controller = {
     love.quit = quit
   end,
 
-  --- @private
-  snapshot = function()
-    if user_draw then
-      View.snap_canvas()
-    end
-  end,
-
   ----------------
   ---  public  ---
   ----------------
-  --- @param C ConsoleController
-  init = function(C)
-    _C = C
+  --- @param CC ConsoleController
+  init = function(CC, mode)
+    _C = CC
+    _mode = mode
   end,
   --- @param C ConsoleController
   --- @param CV ConsoleView
@@ -520,8 +536,9 @@ Controller = {
     local handlers = love.handlers
 
     handlers.keypressed = function(k)
+      --- Power shortcuts
       local function quickswitch()
-        if k == 'f8' then
+        if Key.ctrl() and not Key.alt() and k == 't' then
           if love.state.app_state == 'running'
               or love.state.app_state == 'inspect'
               or love.state.app_state == 'project_open'
@@ -547,18 +564,22 @@ Controller = {
           if k == "pause" then
             C:suspend_run(messages.user_break)
           end
-          if Key.shift() then
-            -- Ensure the user can get back to the console
-            if k == "q" then
-              C:quit_project()
-            end
-            if k == "s" then
-              if love.state.app_state == 'running' then
-                C:stop_project_run()
-              elseif love.state.app_state == 'editor' then
+          if k == "q" then
+            C:quit_project()
+          end
+          if k == "s" then
+            if love.state.app_state == 'running' then
+              C:stop_project_run()
+            elseif love.state.app_state == 'editor' then
+              if Key.shift() then
                 C:finish_edit()
+              else
+                C:close_buffer()
               end
             end
+          end
+          if Key.shift() then
+            --- Ensure the user can get back to the console
             if k == "r" then
               C:reset()
             end
@@ -570,15 +591,44 @@ Controller = {
           C:restart()
         end
       end
+      local function profile()
+        if Key.ctrl() and Key.alt() and k == "p" then
+          if Key.shift() then
+            Prof.stop_profiler()
+          else
+            -- Prof.start_profiler()
+            Prof.start_oneshot()
+          end
+        end
+        if k == "f10" then
+          if love.PROFILE.fpsc == 'off' then
+            love.PROFILE.fpsc = 'T_L_B'
+          elseif love.PROFILE.fpsc == 'T_L_B' then
+            love.PROFILE.fpsc = 'T_R_B'
+          elseif love.PROFILE.fpsc == 'T_R_B' then
+            love.PROFILE.fpsc = 'T_L'
+          elseif love.PROFILE.fpsc == 'T_L' then
+            love.PROFILE.fpsc = 'T_R'
+          elseif love.PROFILE.fpsc == 'T_R' then
+            love.PROFILE.fpsc = 'off'
+          end
+        end
+      end
 
       if playback then
         if love.state.app_state == 'shutdown' then
           love.event.quit()
         end
         restart()
+        if love.PROFILE then
+          profile()
+        end
       else
         restart()
         quickswitch()
+        if love.PROFILE then
+          profile()
+        end
         project_state_change()
       end
 
@@ -750,6 +800,7 @@ Controller = {
     for _, a in pairs(_supported) do
       save_if_differs(a)
     end
+
     save_if_differs('draw')
   end,
 
@@ -760,5 +811,18 @@ Controller = {
   clear_user_handlers = function()
     Controller._userhandlers = {}
     View.clear_snapshot()
+  end,
+
+  oneshot = function()
+    if not love.PROFILE then return end
+    Prof.start_oneshot()
+  end,
+
+  report = function()
+    if not love.PROFILE then return end
+    local report = Prof.report()
+    if report then
+      Log.debug(report)
+    end
   end,
 }

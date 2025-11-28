@@ -10,6 +10,13 @@ require("util.key")
 require("util.table")
 local TerminalTest = require("util.test_terminal")
 
+local messages = {
+  file_does_not_exist = function(name)
+    local n = name or ''
+    return 'cannot open ' .. n .. ': No such file or directory'
+  end,
+}
+
 --- @class ConsoleController
 --- @field time number
 --- @field model Model
@@ -35,13 +42,11 @@ function ConsoleController.new(M, main_ctrl)
   local config = M.cfg
   pre_env.font = config.view.font
   local IC = UserInputController(M.input)
-  local EC = EditorController(M.editor)
   local self = setmetatable({
     time        = 0,
     model       = M,
     main_ctrl   = main_ctrl,
     input       = IC,
-    editor      = EC,
     -- console runner env
     main_env    = env,
     -- copy of the application's env before the prep
@@ -58,6 +63,9 @@ function ConsoleController.new(M, main_ctrl)
 
     cfg         = config
   }, ConsoleController)
+  --- the editor has to know about us
+  local EC = EditorController(M.editor, self)
+  self.editor = EC
   -- initialize the stub env tables
   ConsoleController.prepare_env(self)
   ConsoleController.prepare_project_env(self)
@@ -66,8 +74,10 @@ function ConsoleController.new(M, main_ctrl)
 end
 
 --- @param V ConsoleView
-function ConsoleController:set_view(V)
+function ConsoleController:init_view(V)
   self.view = V
+  self.input:init_view(V.input)
+  self.input:update_view()
 end
 
 --- @param name string
@@ -88,21 +98,25 @@ end
 --- @return boolean success
 --- @return string? errmsg
 local function run_user_code(f, cc, project_path)
-  local G = love.graphics
+  local gfx = love.graphics
   local output = cc.model.output
   local env = cc:get_base_env()
 
-  G.setCanvas(cc:get_canvas())
+  gfx.setCanvas(cc:get_canvas())
   local ok, call_err
   if project_path then
     env = cc:get_project_env()
   end
   ok, call_err = pcall(f)
   if project_path and ok then -- user project exec
+    if love.PROFILE then
+      love.PROFILE.frame = 0
+      love.PROFILE.report = {}
+    end
     cc.main_ctrl.set_user_handlers(env['love'])
   end
   output:restore_main()
-  G.setCanvas()
+  gfx.setCanvas()
   if not ok then
     local msg = LANG.get_call_error(call_err)
     return false, msg
@@ -154,26 +168,30 @@ function ConsoleController:run_project(name)
       { "There's already a project running!" })
     return
   end
-  local P = self.model.projects
+  local P   = self.model.projects
+  local cur = P.current
   local ok
-  if P.current then
+  if cur and (not name or cur.name == name) then
     ok = true
   else
     ok = self:open_project(name, false)
   end
+
   if ok then
-    local runner_env        = self:get_project_env()
+    local runner_env = self:get_project_env()
     local f, load_err, path = P:run(name, runner_env)
     if f then
       local n = name or P.current.name or 'project'
       Log.info('Running \'' .. n .. '\'')
+      love.state.app_state = 'running'
       local rok, run_err = run_user_code(f, self, path)
-      if rok then
-        if self.main_ctrl.user_is_blocking() then
-          love.state.app_state = 'running'
-        end
-      else
+      if not rok then
+        love.state.app_state = 'project_open'
         print('Error: ', run_err)
+      else
+        if not self.main_ctrl.user_is_blocking() then
+          love.state.app_state = 'project_open'
+        end
       end
     else
       --- TODO extract error message here
@@ -182,28 +200,31 @@ function ConsoleController:run_project(name)
   end
 end
 
-_G.o_require = _G.require
---- @param cc ConsoleController
+local o_require = _G.require
+_G.o_require = o_require
 --- @param name string
-local function project_require(cc, name)
+local function project_require(name)
+  return o_require(name)
+end
+
+_G.o_dofile = _G.dofile
+--- @param cc ConsoleController
+--- @param filename string
+--- @param env LuaEnv?
+local function project_dofile(cc, filename, env)
   local P = cc.model.projects
-  local fn = name .. '.lua'
+  local fn = filename
   local open = P.current
   if open then
     local chunk = open:load_file(fn)
-    local pr_env = cc:get_project_env()
     if chunk then
-      setfenv(chunk, pr_env)
-      chunk()
-    else
-      --- hack around love.js not having the bit lib
-      if name == 'bit' and _G.web then
-        pr_env.bit = o_require('util.luabit')
+      if env then
+        setfenv(chunk, env)
       end
+      return true, chunk()
+    else
+      print(messages.file_does_not_exist(filename))
     end
-    --- TODO: is it desirable to allow out-of-project require?
-    -- else
-    -- _require(name)
   end
 end
 
@@ -212,7 +233,7 @@ local compy_audio = require("util.audio")
 
 function ConsoleController.prepare_env(cc)
   local prepared            = cc.main_env
-  prepared.G                = love.graphics
+  prepared.gfx              = love.graphics
 
   local P                   = cc.model.projects
 
@@ -221,7 +242,7 @@ function ConsoleController.prepare_env(cc)
   }
 
   prepared.require          = function(name)
-    return project_require(cc, name)
+    return project_require(name)
   end
 
   --- @param f function
@@ -231,6 +252,14 @@ function ConsoleController.prepare_env(cc)
     else
       return f(...)
     end
+  end
+
+  prepared.require          = project_require
+
+  prepared.dofile           = function(name)
+    return check_open_pr(function()
+      return project_dofile(cc, name)
+    end)
   end
 
   prepared.list_projects    = function()
@@ -326,6 +355,28 @@ function ConsoleController.prepare_env(cc)
     cc:run_project(name)
   end
 
+  local terminal            = cc.model.output.terminal
+  local compy_namespace     = {
+    terminal = {
+      --- @param x number
+      --- @param y number
+      gotoxy = function(x, y)
+        return terminal:move_to(x, y)
+      end,
+      show_cursor = function()
+        return terminal:show_cursor()
+      end,
+      hide_cursor = function()
+        return terminal:hide_cursor()
+      end,
+      clear = function()
+        return terminal:clear()
+      end
+    }
+  }
+  prepared.compy            = compy_namespace
+  prepared.tty              = compy_namespace.terminal
+
   prepared.run              = prepared.run_project
 
   prepared.eval             = LANG.eval
@@ -350,14 +401,17 @@ function ConsoleController.prepare_project_env(cc)
   local cfg                   = cc.model.cfg
   ---@type table
   local project_env           = cc:get_pre_env_c()
-  project_env.G               = love.graphics
+  project_env.gfx             = love.graphics
 
   project_env.compy           = {
     audio = compy_audio
   }
 
   project_env.require         = function(name)
-    return project_require(cc, name)
+    return project_require(name)
+  end
+  project_env.dofile          = function(name)
+    return project_dofile(cc, name, cc:get_project_env())
   end
 
   --- @param msg string?
@@ -382,7 +436,7 @@ function ConsoleController.prepare_project_env(cc)
     close_project(cc)
   end
 
-  local ui_model, input_ref
+  local ui_model, ui_con, input_ref
   local create_input_handle   = function()
     input_ref = table.new_reftable()
   end
@@ -398,10 +452,13 @@ function ConsoleController.prepare_project_env(cc)
     if not input_ref then return end
     ui_model = UserInputModel(cfg, eval, true, prompt)
     ui_model:set_text(init)
-    local inp_con = UserInputController(ui_model, input_ref)
-    local view = UserInputView(cfg.view, inp_con)
+    ui_con = UserInputController(ui_model, input_ref, true)
+    local view = UserInputView(cfg.view, ui_con)
+    ui_con:init_view(view)
+    ui_con:update_view()
+
     love.state.user_input = {
-      M = ui_model, C = inp_con, V = view
+      M = ui_model, C = ui_con, V = view
     }
     return input_ref
   end
@@ -428,6 +485,7 @@ function ConsoleController.prepare_project_env(cc)
       return
     end
     ui_model:set_text(content)
+    ui_con:update_view()
   end
 
   --- @param filters table
@@ -525,13 +583,13 @@ function ConsoleController:restart()
 end
 
 ---@return LuaEnv
-function ConsoleController:get_console_env()
-  return self.main_env
+function ConsoleController:get_pre_env_c()
+  return table.clone(self.pre_env)
 end
 
 ---@return LuaEnv
-function ConsoleController:get_pre_env_c()
-  return table.clone(self.pre_env)
+function ConsoleController:get_console_env()
+  return self.main_env
 end
 
 ---@return LuaEnv
@@ -542,6 +600,18 @@ end
 ---@return LuaEnv
 function ConsoleController:get_base_env()
   return self.base_env
+end
+
+---@return LuaEnv
+function ConsoleController:get_effective_env()
+  if
+      love.state.app_state == 'running'
+      or love.state.app_state == 'inspect'
+  then
+    return self:get_project_env()
+  else
+    return self:get_console_env()
+  end
 end
 
 ---@param t LuaEnv
@@ -555,22 +625,32 @@ function ConsoleController:_set_base_env(t)
   table.protect(t)
 end
 
---- @param msg string?
-function ConsoleController:suspend_run(msg)
-  local runner_env = self:get_project_env()
-  if love.state.app_state ~= 'running' then
+function ConsoleController:suspend()
+  if love.state.app_state ~= 'snapshot' then
     return
   end
+  local runner_env = self:get_project_env()
   Log.info('Suspending project run')
   love.state.app_state = 'inspect'
+  local msg = love.state.suspend_msg
   if msg then
     self.input:set_error({ tostring(msg) })
+    love.state.suspend_msg = nil
   end
 
   self.model.output:invalidate_terminal()
 
   self.main_ctrl.save_user_handlers(runner_env['love'])
   self.main_ctrl.set_default_handlers(self, self.view)
+end
+
+--- @param msg string?
+function ConsoleController:suspend_run(msg)
+  if love.state.app_state ~= 'running' then
+    return
+  end
+  love.state.app_state = 'snapshot'
+  love.state.suspend_msg = msg
 end
 
 --- @param name string
@@ -582,23 +662,25 @@ function ConsoleController:open_project(name, play)
     print('No project name provided!')
     return false
   end
+  local cur = P.current
+  if cur then
+    self:close_project()
+  end
+
   local open, create, err = P:opreate(name, play)
   local ok = open or create
   if ok then
-    local project_loader = (function()
-      local cached = self.loaders[name]
-      if cached then
-        return cached
-      else
-        local loader = P.current:get_loader()
-        self:cache_loader(name, loader)
-        return loader
-      end
-    end)()
+    local project_loader =
+        P.current:get_loader(function()
+          return self:get_effective_env()
+        end)
+    self:cache_loader(name, project_loader)
+
     if not table.is_member(package.loaders, project_loader)
     then
       table.insert(package.loaders, 1, project_loader)
     end
+    love.state.app_state = 'project_open'
   end
   if open then
     print('Project ' .. name .. ' opened')
@@ -637,6 +719,7 @@ function ConsoleController:stop_project_run()
   View.clear_snapshot()
   self.main_ctrl.set_love_draw(self, self.view)
   self.main_ctrl.clear_user_handlers()
+  self.main_ctrl.report()
   love.state.app_state = 'project_open'
 end
 
@@ -666,8 +749,11 @@ function ConsoleController:edit(name, state)
   if ex then
     text = self:_readfile(filename)
   end
-  love.state.prev_state = love.state.app_state
-  love.state.app_state = 'editor'
+
+  if love.state.app_state ~= 'editor' then
+    love.state.prev_state = love.state.app_state
+    love.state.app_state = 'editor'
+  end
   local save = function(newcontent)
     return self:_writefile(filename, newcontent)
   end
@@ -677,17 +763,33 @@ function ConsoleController:edit(name, state)
 end
 
 --- @return EditorState?
+function ConsoleController:close_buffer()
+  self.editor:close_buffer()
+end
+
+--- @return EditorState?
 function ConsoleController:finish_edit()
   self.editor:save_state()
-  local name, newcontent = self.editor:close()
-  local ok, err = self:_writefile(name, newcontent)
+  self.editor:close()
+  local ok = true
+  local errs = {}
+  -- local bfs = self.editor:close()
+  -- for _, bc in ipairs(bfs) do
+  --   local name, newcontent = bc.name, bc.content
+  --   local bok, err = self:_writefile(name, newcontent)
+  --   if not bok then
+  --     ok = false
+  --     table.insert(errs, err)
+  --   end
+  -- end
   if ok then
     love.state.app_state = love.state.prev_state
     love.state.prev_state = nil
-    return self.editor:get_state()
   else
-    print(err)
+    print(string.unlines(errs))
   end
+  self.buffers = {}
+  return self.editor:get_state()
 end
 
 --- Handlers ---
@@ -717,6 +819,11 @@ function ConsoleController:keypressed(k)
 
   local function terminal_test()
     local out = self.model.output
+    if love.state.app_state ~= 'ready'
+        or love.state.app_state ~= 'project_open'
+    then
+      return
+    end
     if not love.state.testing then
       love.state.testing = 'running'
       input:cancel()
@@ -773,18 +880,20 @@ function ConsoleController:keypressed(k)
         self.model.output:reset()
       end
       if love.DEBUG then
-        if k == 't' then
+        if Key.alt() and k == 't' then
           terminal_test()
           return
         end
       end
     end
   end
+  input:update_view()
 end
 
 --- @param k string
 function ConsoleController:keyreleased(k)
   self.input:keyreleased(k)
+  self.input:update_view()
 end
 
 --- @param x integer

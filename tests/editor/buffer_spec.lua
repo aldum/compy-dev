@@ -3,7 +3,6 @@ local parser = require('model.lang.lua.parser')()
 
 require('util.table')
 
-
 describe('Buffer #editor', function()
   local w = 64
   local chunker = function(t, single)
@@ -23,11 +22,12 @@ describe('Buffer #editor', function()
     local cbuffer = BufferModel('untitled', tst, noop)
     local bc = cbuffer:get_content()
     assert.same(cbuffer.content_type, 'plain')
-    assert.same(4, #bc)
+    assert.same(5, #bc)
     assert.same(l1, bc[1])
     assert.same(l2, bc[2])
     assert.same(l3, bc[3])
     assert.same(l4, bc[4])
+    assert.same('', bc[5])
   end)
 
   it('renders lua', function()
@@ -39,7 +39,7 @@ describe('Buffer #editor', function()
     local cbuffer = BufferModel('untitled.lua', tst, noop, chunker, hl)
     local bc = cbuffer:get_content()
     assert.same(cbuffer.content_type, 'lua')
-    assert.same(4, #bc)
+    assert.same(5, #bc)
     assert.same({ l1 }, bc[1].lines)
     assert.same({ l2 }, bc[2].lines)
     assert.same({ l3 }, bc[3].lines)
@@ -47,6 +47,7 @@ describe('Buffer #editor', function()
   end)
 
   describe('setup', function()
+    local buffer, bufcon
     local meat = [[function sierpinski(depth)
   lines = { '*' }
   for i = 2, depth + 1 do
@@ -65,14 +66,18 @@ end]]
 
 
 print(sierpinski(4))]])
-    local buffer = BufferModel('test.lua', txt, noop, chunker, hl)
+
+    lazy_setup(function()
+      buffer = BufferModel('test.lua', txt,
+        noop, chunker, hl)
+      bufcon = buffer:get_content()
+    end)
     it('sets name', function()
       assert.same('test.lua', buffer.name)
     end)
-    local bufcon = buffer:get_content()
     it('sets content', function()
       assert.same('block', bufcon:type())
-      assert.same(4, #bufcon)
+      assert.same(5, #bufcon)
       assert.same({ '--- @param depth integer' }, bufcon[1].lines)
       assert.same(string.lines(meat), bufcon[2].lines)
       assert.is_true(table.is_instance(bufcon[3], 'empty'))
@@ -81,113 +86,121 @@ print(sierpinski(4))]])
   end)
 
   describe('modifications', function()
+    local trtl =
+    'Turtle graphics game inspired the LOGO family of languages.'
+    local turtle_doc = {
+      '',
+      trtl,
+    }
+    local turtle = {
+      '--- @diagnostic disable',
+      'width, height = gfx.getDimensions()',
+      'midx = width / 2',
+      'midy = height / 2',
+      'incr = 5',
+      '',
+      'tx, ty = midx, midy',
+      'debug = false',
+      'debugColor = Color.yellow',
+      '',
+      'bg_color = Color.black',
+      '',
+      'local function drawHelp()',
+      '  gfx.setColor(Color[Color.white])',
+      '  gfx.print("Press [I] to open console", 20, 20)',
+      '  gfx.print("Enter \'forward\', \'back\', \'left\', or \'right\' to move the turtle!", 20, 40)',
+      'end',
+      '',
+      'local function drawDebuginfo()',
+      '  gfx.setColor(Color[debugColor])',
+      '  local label = string.format("Turtle position: (%d, %d)", tx, ty)',
+      '  gfx.print(label, width - 200, 20)',
+      'end',
+      '',
+      'function love.draw()',
+      '  drawBackground()',
+      '  drawHelp()',
+      '  drawTurtle(tx, ty)',
+      '  if debug then drawDebuginfo() end',
+      'end',
+      '',
+      'function love.keypressed(key)',
+      '  if love.keyboard.isDown("lshift", "rshift") then',
+      '    if key == \'r\' then',
+      '      tx, ty = midx, midy',
+      '    end',
+      '  end',
+      '  if key == \'space\' then',
+      '    debug = not debug',
+      '  end',
+      '  if key == \'pause\' then',
+      '    stop()',
+      '  end',
+      'end',
+      '',
+      'function love.keyreleased(key)',
+      '  if key == \'i\' then',
+      '    input_text(r)',
+      '  end',
+      '  if key == \'return\' then',
+      '    eval()',
+      '  end',
+      '',
+      '  if love.keyboard.isDown("lctrl", "rctrl") then',
+      '    if key == "escape" then',
+      '      love.event.quit()',
+      '    end',
+      '  end',
+      'end',
+      '',
+      'local t = 0',
+      'function love.update(dt)',
+      '  t = t + dt',
+      '  if ty > midy then',
+      '    debugColor = Color.red',
+      '  end',
+      'end',
+      '',
+    }
+    local buffer
     describe('plaintext', function()
-      local turtle_doc = {
+      lazy_setup(function()
+        buffer = BufferModel('README', turtle_doc)
+      end)
+      local qed = 'qed.'
+      local new = {
         '',
-        'Turtle graphics game inspired the LOGO family of languages.',
+        trtl,
+        '',
+        qed,
+        ''
       }
-      local buffer = BufferModel('README', turtle_doc)
       it('insert newline', function()
         assert.same(#turtle_doc + 1, buffer:get_selection())
-        local qed = 'qed.'
         buffer:replace_selected_text({ qed })
         assert.same(#turtle_doc + 1, buffer:get_selection())
         assert.same(qed, buffer:get_selected_text())
         buffer:insert_newline()
-        local new = {
-          '',
-          'Turtle graphics game inspired the LOGO family of languages.',
-          '',
-          qed,
-        }
+
         assert.same(new, buffer:get_text_content())
       end)
     end)
 
     describe('lua', function()
-      local turtle = {
-        '--- @diagnostic disable',
-        'width, height = G.getDimensions()',
-        'midx = width / 2',
-        'midy = height / 2',
-        'incr = 5',
-        '',
-        'tx, ty = midx, midy',
-        'debug = false',
-        'debugColor = Color.yellow',
-        '',
-        'bg_color = Color.black',
-        '',
-        'local function drawHelp()',
-        '  G.setColor(Color[Color.white])',
-        '  G.print("Press [I] to open console", 20, 20)',
-        '  G.print("Enter \'forward\', \'back\', \'left\', or \'right\' to move the turtle!", 20, 40)',
-        'end',
-        '',
-        'local function drawDebuginfo()',
-        '  G.setColor(Color[debugColor])',
-        '  local label = string.format("Turtle position: (%d, %d)", tx, ty)',
-        '  G.print(label, width - 200, 20)',
-        'end',
-        '',
-        'function love.draw()',
-        '  drawBackground()',
-        '  drawHelp()',
-        '  drawTurtle(tx, ty)',
-        '  if debug then drawDebuginfo() end',
-        'end',
-        '',
-        'function love.keypressed(key)',
-        '  if love.keyboard.isDown("lshift", "rshift") then',
-        '    if key == \'r\' then',
-        '      tx, ty = midx, midy',
-        '    end',
-        '  end',
-        '  if key == \'space\' then',
-        '    debug = not debug',
-        '  end',
-        '  if key == \'pause\' then',
-        '    stop()',
-        '  end',
-        'end',
-        '',
-        'function love.keyreleased(key)',
-        '  if key == \'i\' then',
-        '    input_text(r)',
-        '  end',
-        '  if key == \'return\' then',
-        '    eval()',
-        '  end',
-        '',
-        '  if love.keyboard.isDown("lctrl", "rctrl") then',
-        '    if key == "escape" then',
-        '      love.event.quit()',
-        '    end',
-        '  end',
-        'end',
-        '',
-        'local t = 0',
-        'function love.update(dt)',
-        '  t = t + dt',
-        '  if ty > midy then',
-        '    debugColor = Color.red',
-        '  end',
-        'end',
-        '',
-      }
-      local text = turtle
-
-      local buffer = BufferModel('main.lua', text,
-        noop, chunker, hl)
-      local bc = buffer:get_content()
-      local n_blocks = 24
+      local bc
+      lazy_setup(function()
+        buffer = BufferModel('main.lua', turtle,
+          noop, chunker, hl)
+        bc = buffer:get_content()
+      end)
+      local n_blocks = 25
       it('invariants', function()
         assert.same(n_blocks, #bc)
         assert.same(n_blocks, buffer:get_content_length())
 
-        assert.same(text, buffer:get_text_content())
+        assert.same(turtle, buffer:get_text_content())
 
-        assert.same(n_blocks + 1, buffer:get_selection())
+        assert.same(n_blocks, buffer:get_selection())
         local ln = buffer:get_selection_start_line()
         assert.same(68, ln)
       end)
@@ -201,7 +214,7 @@ print(sierpinski(4))]])
         delbuf:delete_selected_text()
         assert.same(n_blocks - 2, delbuf:get_content_length())
         assert.same(1, delbuf:get_selection())
-        assert.same({ text[3] }, delbuf:get_selected_text())
+        assert.same({ turtle[3] }, delbuf:get_selected_text())
       end)
 
       it('insert empty', function()
@@ -212,13 +225,13 @@ print(sierpinski(4))]])
         assert.same('', embuf:get_text_content()[1])
         embuf:move_selection('down', 2)
         assert.same(3, embuf:get_selection())
-        assert.same({ 'width, height = G.getDimensions()' }, embuf:get_selected_text())
+        assert.same({ 'width, height = gfx.getDimensions()' }, embuf:get_selected_text())
 
         local res = {
           '',
           '--- @diagnostic disable',
           '',
-          'width, height = G.getDimensions()',
+          'width, height = gfx.getDimensions()',
           'midx = width / 2',
         }
         assert.same(3, embuf:get_selection())
@@ -229,7 +242,7 @@ print(sierpinski(4))]])
         embuf:insert_newline()
         assert.same(res, table.take(embuf:get_text_content(), 5))
         embuf:move_selection('down')
-        assert.same({ 'width, height = G.getDimensions()' }, embuf:get_selected_text())
+        assert.same({ 'width, height = gfx.getDimensions()' }, embuf:get_selected_text())
         embuf:insert_newline()
         assert.same(res, table.take(embuf:get_text_content(), 5))
       end)
@@ -242,13 +255,14 @@ print(sierpinski(4))]])
         local ln = replbuf:get_selection_start_line()
         assert.same(61, ln)
         assert.same({ 'local t = 0' }, replbuf:get_selected_text())
-        assert.same({ text[ln] }, replbuf:get_selected_text())
+        assert.same({ turtle[ln] }, replbuf:get_selected_text())
 
         local empty = Empty(ln)
         local ins, n = replbuf:replace_selected_text({ empty })
         assert.truthy(ins)
         assert.same(1, n)
       end)
+
       it('replacing block with empty', function()
         local replbuf = table.clone(buffer)
         replbuf:move_selection('down', nil, true)
@@ -269,6 +283,7 @@ print(sierpinski(4))]])
         assert.truthy(ins)
         assert.same(1, n)
       end)
+
       it('replacing middle block with empty', function()
         local replbuf = table.clone(buffer)
         replbuf:move_selection('down', nil, true)

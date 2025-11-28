@@ -96,7 +96,9 @@ function History:_get_entries()
   return self:items()
 end
 
+
 --- For debug purposes, log content
+--- @private
 --- @param f function
 function History:_dump(f)
   local log = f or Log.debug

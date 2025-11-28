@@ -122,6 +122,10 @@ local function terse_hash(t, level, prev_seen, jsonify)
   return res
 end
 
+local function nontable(t)
+  return '(not a table) ' .. tostring(t)
+end
+
 --- @param a table?
 --- @param skip integer?
 local function terse_array(a, skip)
@@ -142,7 +146,7 @@ local function terse_array(a, skip)
 
     return res
   else
-    return ''
+    return nontable(a)
   end
 end
 
@@ -154,7 +158,9 @@ end
 --- @param style dumpstyle?
 --- @return string
 local function terse_ast(ast, skip_lineinfo, style)
-  if type(ast) ~= 'table' then return '' end
+  if type(ast) ~= 'table' then
+    return nontable(ast)
+  end
   local style = style or 'json5'
 
   --- @param t table?
@@ -307,7 +313,7 @@ Debug = {
   --- @param t string[]?
   --- @param no_ln boolean?
   --- @param skip integer?
-  --- @param trunc boolean?
+  --- @param trunc number?
   --- @return string
   text_table = function(t, no_ln, skip, trunc)
     local res = '\n'
@@ -489,6 +495,7 @@ local error = function(...)
   printer(s)
 end
 local debug = function(...)
+  if love and not love.DEBUG then return end
   local args = { ... }
   local ts = string.format("%.3f ", os.clock())
   local s = annot(ts .. 'DEBUG ',
@@ -496,7 +503,7 @@ local debug = function(...)
   printer(s)
 end
 local once = function(...)
-  if not love.DEBUG then return end
+  if not love or not love.DEBUG then return end
   local args = { ... }
   local key = love.debug.once .. string.join(args, '')
   local kh = hash(key)
@@ -516,7 +523,7 @@ Log = {
   once = once,
 
   fire_once = function()
-    if not love.DEBUG then return end
+    if not love or not love.DEBUG then return end
     love.debug.once = love.debug.once + 1
   end,
   --- @param color integer

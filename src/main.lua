@@ -1,5 +1,6 @@
 local redirect_to = require("model.io.redirect")
 local OS = require("util.os")
+
 require("model.consoleModel")
 require("controller.controller")
 require("controller.consoleController")
@@ -9,13 +10,14 @@ require("view.consoleView")
 local colors = require("conf.colors")
 local hostconf = prequire('host')
 
+require("util.lua")
 require("util.key")
 require("util.debug")
 local FS = require("util.filesystem")
 
 require("lib.error_explorer")
 
-G = love.graphics
+local gfx = love.graphics
 
 local messages = {
   how_to_exit = 'Press Ctrl-Esc to exit',
@@ -45,11 +47,11 @@ local config_view = function(flags)
 
   local font_dir = "assets/fonts/"
   local mf = "ubuntu_mono_bold_nerd.ttf"
-  local font_main = G.newFont(
+  local font_main = gfx.newFont(
     font_dir .. mf, font_size)
-  local font_icon = G.newFont(
+  local font_icon = gfx.newFont(
     font_dir .. "SFMonoNerdFontMono-Regular.otf", font_size)
-  local font_cjk = G.newFont(
+  local font_cjk = gfx.newFont(
     font_dir .. "SarasaGothicJ-Bold.ttf", font_size * (2 / 3))
   font_main:setFallbacks(font_icon, font_cjk)
 
@@ -64,9 +66,9 @@ local config_view = function(flags)
   local lines = 16
   local input_max = 14
 
-  local font_labels = G.newFont(font_dir .. mf, 12)
-  local w = love.fixWidth or G.getWidth()
-  local h = love.fixHeight or G.getHeight()
+  local font_labels = gfx.newFont(font_dir .. mf, 12)
+  local w = love.fixWidth or gfx.getWidth()
+  local h = love.fixHeight or gfx.getHeight()
   local eh = h - 2 * fh
   local debugheight = math.floor(eh / (love.test_grid_y * fh))
   local debugwidth = math.floor(w / love.test_grid_x) / fw
@@ -80,11 +82,17 @@ local config_view = function(flags)
   end
 
   local drawableChars = math.floor(drawableWidth / fw)
-  if love.DEBUG then drawableChars = drawableChars - 3 end
+
+  if love.DEBUG then
+    drawableChars = parse_int(os.getenv("COMPY_WRAP"))
+        or drawableChars - 3
+    lines = parse_int(os.getenv("COMPY_LINES")) or lines
+  end
 
   return {
     font = font_main,
     iconfont = font_icon,
+    statusline_border = 4,
     fh = fh,
     fw = fw,
     lh = lh,
@@ -104,6 +112,7 @@ local config_view = function(flags)
     drawableWidth = drawableWidth,
     drawableChars = drawableChars,
 
+    fold_lines = 1,
     drawtest = tf.draw,
     sizedebug = tf.size,
   }
@@ -155,8 +164,7 @@ local setup_storage = function(mode)
   else
     if OS.get_name() == 'Android' then
       if mode == 'play' then
-        local savedir = love.filesystem.getSaveDirectory()
-        FS.mkdirp(savedir)
+        --- initializing directory moved to app code
       else
         local ok, sd_path = android_storage_find()
         if not ok then
@@ -187,8 +195,10 @@ local setup_storage = function(mode)
     project_path = project_path,
   }
   for _, d in pairs(paths) do
-    local ok, err = FS.mkdir(d)
-    if not ok then Log(err) end
+    if mode ~= 'play' then
+      local ok, err = FS.mkdirp(d)
+      if not ok then Log(err) end
+    end
   end
   --- this is virtual, we don't want to actually create it
   paths.play_path = '/play'
@@ -262,6 +272,15 @@ function love.load()
   local autotest =
       mode == 'test' and startup.testflags.auto or false
   local playback = mode == 'play'
+  if love.PROFILE then
+    love.profiler = require('lib.profile')
+  end
+
+  --- @type LoveState
+  love.state = {
+    testing = false,
+    app_state = 'starting',
+  }
 
   if playback and not string.is_non_empty_string(startup.path) then
     exit(messages.play_no_project)
@@ -292,17 +311,14 @@ function love.load()
     load_project(startup.path or '', paths)
   end
 
-  --- @type LoveState
-  love.state = {
-    testing = false,
-    has_removable = has_removable,
-    user_input = nil,
-    app_state = 'ready'
-  }
+  love.state.has_removable = has_removable
+  love.state.app_state = 'ready'
+
   if love.DEBUG then
     love.debug = {
-      show_snapshot = true,
       show_terminal = true,
+      show_buffer = true,
+      show_snapshot = true,
       show_canvas = true,
       show_input = true,
       once = 0
@@ -336,9 +352,8 @@ function love.load()
   redirect_to(CM)
   local CC = ConsoleController(CM, ctrl)
   local CV = ConsoleView(baseconf, CC)
-  CC:set_view(CV)
 
-  ctrl.init(CC)
+  ctrl.init(CC, mode)
   ctrl.setup_callback_handlers(CC)
   ctrl.set_default_handlers(CC, CV)
 

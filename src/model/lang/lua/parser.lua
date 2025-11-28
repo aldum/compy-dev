@@ -5,7 +5,7 @@ require("util.debug")
 require("util.string.string")
 require("util.dequeue")
 
---- @class luaAST : token[]
+--- @class luaAST : token
 
 --- @alias CPos 'first'|'last'
 
@@ -288,6 +288,7 @@ return function(lib)
     local w = wrap or 80
     local ok, r = parse(code)
     if ok then
+      --- @diagnostic disable-next-line: param-type-mismatch
       local src = ast_to_src(r, {}, w)
       return string.lines(src)
     end
@@ -380,6 +381,8 @@ return function(lib)
           end
         end
 
+        --- multiline empty collapse offset
+        local of = 0
         for _, v in ipairs(r) do
           has_lines = true
           local li = v.lineinfo
@@ -388,14 +391,15 @@ return function(lib)
           local comments = ast_extract_comments(v, {}, wrap)
 
           get_comments(comments, 'first')
-
-          -- account for empty lines, including the zeroth
+          --- account for empty lines, including the zeroth
           if fl > last + 1 then
-            ret:insert(Empty(last + 1), idx)
+            ret:insert(Empty(last + 1 - of), idx)
             idx = idx + 1
+            last = last + 1
+            of = of + (fl - last - 1)
           end
           local tex = table.slice(text or {}, fl, ll)
-          local chunk = Chunk(tex, Range(fl, ll))
+          local chunk = Chunk(tex, Range(fl - of, ll - of))
           ret:insert(chunk, idx)
           idx = idx + 1
           last = ll
@@ -409,13 +413,28 @@ return function(lib)
           get_comments(single_comment, 'first')
         end
 
+        if not single and ret:last().tag ~= 'empty' then
+          ret:push_back(Empty(last + 1 - of))
+        end
         return true, ret, r
       else
         --- content is not valid lua
         return false, Dequeue(text, 'string'), r
       end
     else
-      return true, Dequeue(Empty(1), 'block'), r
+      return true, Dequeue({Empty(1)}, 'block'), r
+    end
+  end
+
+  --- @param code str
+  --- @param n integer?
+  --- @return string[]?
+  local function trunc(code, n)
+    local lines = n or 1
+    if lines == 1 then
+      local txt = string.lines(code)
+      local line1 = txt[1]:sub(1, -1) .. '…'
+      return { line1 }
     end
   end
 
@@ -425,5 +444,6 @@ return function(lib)
     highlighter = highlighter,
     ast_to_src  = ast_to_src,
     chunker     = chunker,
+    trunc       = trunc,
   }
 end
