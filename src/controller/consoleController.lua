@@ -25,6 +25,7 @@ local messages = {
 --- @field pre_env LuaEnv
 --- @field base_env LuaEnv
 --- @field project_env LuaEnv
+--- @field running boolean
 --- @field loaders function[]
 --- @field input UserInputController
 --- @field editor EditorController
@@ -56,6 +57,7 @@ function ConsoleController.new(M, main_ctrl)
     -- this is the env in which the user project runs
     -- subject to change, for example when switching projects
     project_env = {},
+    running     = false,
 
     loaders     = {},
 
@@ -574,6 +576,13 @@ function ConsoleController:evaluate_input()
       end
     end
   end
+end
+
+function ConsoleController:is_running()
+  if love.state.app_state == 'running' then
+    return true
+  end
+  return self.running
 end
 
 function ConsoleController:_reset_executor_env()

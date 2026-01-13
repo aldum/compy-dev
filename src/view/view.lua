@@ -14,7 +14,8 @@ View = {
     gfx.push('all')
     local terminal = C:get_terminal()
     local canvas = C:get_canvas()
-    CV:draw(terminal, canvas, View.snapshot)
+    local hide = false -- C:is_running()
+    CV:draw(terminal, canvas, View.snapshot, hide)
     gfx.pop()
   end,
 

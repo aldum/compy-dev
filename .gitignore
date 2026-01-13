@@ -5,6 +5,7 @@
 .history
 dist/*
 web/dist/*
+web/wiki/*.xml
 web/dist-c/*
 web/node_modules/*
 .debug/*
