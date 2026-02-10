@@ -437,7 +437,21 @@ function ConsoleController.prepare_project_env(cc)
   end
   -- project_env.require         = function(name)
   --   return project_require(name, 'run')
-  -- end
+    -- end
+
+  --- @param name string
+  --- @return string?
+    project_env.readfile        = function(name)
+        --- @diagnostic disable-next-line: invisible
+        return cc:_readfile(name)
+    end
+
+  --- @param name string
+  --- @return string[]?
+  project_env.readlines        = function(name)
+    --- @diagnostic disable-next-line: invisible
+    return cc:_readlines(name)
+  end
 
   --- @param msg string?
   project_env.pause           = function(msg)
