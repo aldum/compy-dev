@@ -357,6 +357,7 @@ function love.load()
   ctrl.set_default_handlers(CC, CV)
 
   gfx.setColor(0, 0, 0, 1)
+  gfx.setFont(viewconf.font)
 
   if playback then
     local ok, err = CC:open_project('play', true)

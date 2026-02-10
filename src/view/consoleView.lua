@@ -40,7 +40,8 @@ ConsoleView = class.create(new)
 --- @param terminal table
 --- @param canvas love.Canvas
 --- @param snapshot love.Image?
-function ConsoleView:draw(terminal, canvas, snapshot)
+--- @param hide_input boolean
+function ConsoleView:draw(terminal, canvas, snapshot, hide_input)
   if love.DEBUG then
     self:draw_placeholder()
   end
@@ -52,7 +53,9 @@ function ConsoleView:draw(terminal, canvas, snapshot)
       self.drawable_height, snapshot)
 
     if ViewUtils.conditional_draw('show_input') then
+      -- if not hide_input then
       self.input:draw()
+      -- end
     end
   end
 
