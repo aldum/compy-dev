@@ -171,6 +171,22 @@ function ConsoleController:_writefile(name, content)
   return p:writefile(name, text)
 end
 
+function ConsoleController:writefile(name, content)
+  local P = self.model.projects
+  local p = P.current
+  local fpath = p:get_path(name)
+  local ex = FS.exists(fpath)
+  if ex then
+    -- TODO: confirm overwrite
+  end
+  local ok, err = self:_writefile(name, content)
+  if ok then
+    print(name .. ' written')
+  else
+    print(err)
+  end
+end
+
 function ConsoleController:run_project(name)
   if love.state.app_state == 'inspect' or
       love.state.app_state == 'running'
@@ -351,20 +367,7 @@ function ConsoleController.prepare_env(cc)
   --- @param name string
   --- @param content string[]
   prepared.writefile        = function(name, content)
-    return check_open_pr(function()
-      local p = P.current
-      local fpath = p:get_path(name)
-      local ex = FS.exists(fpath)
-      if ex then
-        -- TODO: confirm overwrite
-      end
-      local ok, err = cc:_writefile(name, content)
-      if ok then
-        print(name .. ' written')
-      else
-        print(err)
-      end
-    end)
+    return check_open_pr(cc.writefile, cc, name, content)
   end
 
   --- @param name string
@@ -437,20 +440,26 @@ function ConsoleController.prepare_project_env(cc)
   end
   -- project_env.require         = function(name)
   --   return project_require(name, 'run')
-    -- end
+  -- end
 
   --- @param name string
   --- @return string?
-    project_env.readfile        = function(name)
-        --- @diagnostic disable-next-line: invisible
-        return cc:_readfile(name)
-    end
+  project_env.readfile        = function(name)
+    --- @diagnostic disable-next-line: invisible
+    return cc:_readfile(name)
+  end
 
   --- @param name string
   --- @return string[]?
-  project_env.readlines        = function(name)
+  project_env.readlines       = function(name)
     --- @diagnostic disable-next-line: invisible
     return cc:_readlines(name)
+  end
+
+  --- @param name string
+  --- @param content string[]
+  project_env.writefile       = function(name, content)
+    return cc:writefile(name, content)
   end
 
   --- @param msg string?
@@ -850,15 +859,6 @@ function ConsoleController:finish_edit()
   self.editor:close()
   local ok = true
   local errs = {}
-  -- local bfs = self.editor:close()
-  -- for _, bc in ipairs(bfs) do
-  --   local name, newcontent = bc.name, bc.content
-  --   local bok, err = self:_writefile(name, newcontent)
-  --   if not bok then
-  --     ok = false
-  --     table.insert(errs, err)
-  --   end
-  -- end
   if ok then
     love.state.app_state = love.state.prev_state
     love.state.prev_state = nil
