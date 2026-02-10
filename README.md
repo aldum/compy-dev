@@ -137,7 +137,11 @@ contents.
 
 - `readfile(file)`
 
-  Open _file_ and display it's contents.
+  Open _file_ and return it's contents as a single string.
+
+- `readlines(file)`
+
+  Open _file_ and return a string table of it's lines.
 
 - `writefile(file, content)`
 
