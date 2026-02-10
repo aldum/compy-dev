@@ -1,6 +1,5 @@
 gfx = love.graphics
 
-font = gfx.newFont()
 bg_color = Color.black
 body_color = Color.green
 limb_color = body_color + Color.bright
@@ -71,15 +70,16 @@ function drawTurtle(x, y)
 end
 
 function drawHelp()
+  local x = 15
   gfx.setColor(Color[Color.white])
-  gfx.print("Press [I] to open console", 20, 20)
-  local help = "Enter 'forward', 'back', 'left', or 'right'" ..
+  gfx.print("Press [I] to open console", x, 20)
+  local help = "Enter 'forward', 'back', 'left', or 'right' " ..
       "to move the turtle!"
-  gfx.print(help, 20, 50)
+  gfx.print(help, x, 50)
 end
 
 function drawDebuginfo()
   gfx.setColor(Color[debug_color])
   local dt = string.format("Turtle position: (%d, %d)", tx, ty)
-  gfx.print(dt, width - 200, 20)
+  gfx.print(dt, width - 500, 80)
 end
