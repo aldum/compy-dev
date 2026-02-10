@@ -89,7 +89,7 @@ end
 
 --- @param name string
 --- @return boolean success
---- @return string?|string result|errmsg
+--- @return string? result|errmsg
 function Project:readfile(name)
   local fp
   if self.play then
