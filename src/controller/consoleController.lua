@@ -1127,7 +1127,10 @@ end
 --- @param f function
 function ConsoleController:use_canvas(f)
   local canvas = self.model.output.canvas
-  gfx.setCanvas(canvas)
+  gfx.setCanvas({
+    canvas = canvas,
+    stencil = true
+  })
   local r = f()
   gfx.setCanvas()
   return r

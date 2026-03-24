@@ -10,6 +10,13 @@ local D = 24
 
 local h, m, s, t
 function setTime()
+  love.graphics.stencil(function()
+    love.graphics.setColor(1, 1, 1)
+    local time = love.timer.getTime() * 3
+    love.graphics.circle("fill", 115 * .5 + math.cos(time) * 20, 50 * .5 + math.sin(time) * 20,
+      10 + math.sin(time) * 2)
+  end, 'replace', 1)
+
   local time = os.date("*t")
   h = time.hour
   m = time.min
