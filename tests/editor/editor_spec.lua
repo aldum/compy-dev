@@ -600,7 +600,7 @@ describe('Editor #editor', function()
           local new_func = mock_func_snippet("new_func")
           session:submit(new_func)
 
-          assert.truthy(input:is_empty(), "input is empty")
+          assert.is_true(input:is_empty(), "input cleared")
           assert.same(n_blocks+1, buffer.selection,
                       "selection moved down by 1")
 
@@ -620,7 +620,7 @@ describe('Editor #editor', function()
           local new_code = src(f1, f2)
           session:submit(new_code)
 
-          assert.truthy(input:is_empty(), "input is empty")
+          assert.is_true(input:is_empty(), "input cleared")
           assert.same(n_blocks+2, buffer.selection,
                       "selection moved down by 2")
           assert.same( '',
@@ -645,7 +645,7 @@ describe('Editor #editor', function()
           local f_oversized = mock_func_snippet("oversized",20)
           session:submit(f_oversized)
 
-          assert.falsy(input:is_empty(), "input is not empty")
+          assert.is_false(input:is_empty(), "input not cleared")
           assert.same( string.lines(f_oversized),
                        input:get_text(),
                        "text remains in the input")
@@ -676,7 +676,7 @@ describe('Editor #editor', function()
                       buffer:get_selected_text(),
                       "normal block is injected")
 
-          assert.falsy(input:is_empty(), "input is not empty")
+          assert.is_false(input:is_empty(), "input not cleared")
           assert.same(string.lines(f_oversized),
                       input:get_text(),
                       "oversized block kept in input")
