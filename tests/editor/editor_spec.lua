@@ -614,7 +614,6 @@ describe('Editor #editor', function()
         end)
 
         it("appends multiple normal blocks", function()
-          pending("regression, to be fixed later")
           local f1 = mock_func_snippet("f1")
           local f2 = mock_func_snippet("f2")
           local new_code = src(f1, f2)
@@ -641,7 +640,6 @@ describe('Editor #editor', function()
         end)
 
         it('rejects oversized blocks', function()
-          pending("TBD")
           local f_oversized = mock_func_snippet("oversized",20)
           session:submit(f_oversized)
 
