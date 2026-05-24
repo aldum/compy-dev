@@ -176,7 +176,7 @@ LuaEditorEval = (function()
   --- text validations
   local max_length = function(n)
     return function(s)
-      if string.len(s) < n then
+      if string.len(s) <= n then
         return true
       end
       return false, 'line too long!'
