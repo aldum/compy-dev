@@ -134,7 +134,8 @@ one-harmony:
 VERSION := `git describe --tags --long --always`
 
 package: version
-  @7z a {{DIST}}/game.love ./src/* > /dev/null
+  @rm -f {{DIST}}/game.love
+  @7z -tzip a {{DIST}}/game.love ./src/* > /dev/null
   @echo packaged:
   @ls -lh {{DIST}}/game.love
 
