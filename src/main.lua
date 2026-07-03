@@ -15,6 +15,7 @@ require("util.lua")
 require("util.key")
 require("util.debug")
 local FS = require("util.filesystem")
+local usb = require("util.usb")
 
 require("lib.error_explorer")
 
@@ -210,11 +211,14 @@ local setup_storage = function(mode)
   end
 
   local project_path = FS.join_path(storage_path, 'projects')
+  local microbit_path = usb.detect()
   local paths = {
     storage_path = storage_path,
     project_path = project_path,
+    --- detection result; refresh on-demand from project_env
+    microbit_path = microbit_path,
   }
-  for _, d in pairs(paths) do
+  for _, d in ipairs({ storage_path, project_path }) do
     if mode ~= 'play' then
       local ok, err = FS.mkdirp(d)
       if not ok then Log(err) end

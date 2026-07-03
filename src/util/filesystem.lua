@@ -555,5 +555,17 @@ else
   end
 end
 
+--- Atomic rename on the same filesystem.
+--- Uses the standard `os.rename` (rename(2)) so the target
+--- only ever appears complete.
+--- @param source string
+--- @param target string
+--- @return boolean success
+--- @return string? error
+function FS.rename(source, target)
+  local ok, err = os.rename(source, target)
+  return ok or false, err
+end
+
 
 return FS

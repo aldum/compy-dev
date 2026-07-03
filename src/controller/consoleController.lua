@@ -8,6 +8,7 @@ local class = require('util.class')
 local LANG = require("util.eval")
 local FS = require('util.filesystem')
 local Application = require('util.application')
+local usb = require('util.usb')
 require("util.key")
 require("util.table")
 local TerminalTest = require("util.test_terminal")
@@ -340,12 +341,36 @@ function ConsoleController:writefile(name, content)
   end
 end
 
+--- @param content any
+--- @return boolean success
+--- @return string? err
+function ConsoleController:flash_microbit(content)
+  local P = self.model.projects
+  local p = P.current
+  if not p then
+    return false
+  end
+  return p:flash_microbit(content)
+end
+
+--- Re-run USB device detection (e.g. after plugging a micro:bit
+--- in later than startup). Stores the result in
+--- love.paths.microbit_path.
+--- @return string? path nil if no device found
+function ConsoleController:detect_microbit()
+  local path = usb.detect()
+  if type(love) == 'table' and love.paths then
+    love.paths.microbit_path = path
+  end
+  return path
+end
+
 _G.o_loadfile = _G.loadfile
 --- @param name string
 --- @return function?
 function ConsoleController:loadfile(name)
-  local PS               = self.model.projects
-  local p                = PS.current
+  local PS    = self.model.projects
+  local p     = PS.current
   local chunk = p:load_file(name)
   return chunk
 end
@@ -1330,16 +1355,16 @@ function ConsoleController.prepare_project_env(cc)
   require("controller.userInputController")
   require("model.input.userInputModel")
   require("view.input.userInputView")
-  local cfg                   = cc.model.cfg
+  local cfg                    = cc.model.cfg
   ---@type table
-  local project_env           = cc:get_pre_env_c()
+  local project_env            = cc:get_pre_env_c()
 
-  local P                     = cc.model.projects
+  local P                      = cc.model.projects
 
-  project_env.gfx             = love.graphics
+  project_env.gfx              = love.graphics
 
   --- @param f function
-  local check_open_pr         = function(f, ...)
+  local check_open_pr          = function(f, ...)
     if not P.current then
       print(P.messages.no_open_project)
     else
@@ -1347,10 +1372,19 @@ function ConsoleController.prepare_project_env(cc)
     end
   end
 
-  project_env.require         = function(name)
+  --- @param f function
+  local check_microbit_path    = function(f, ...)
+    if not love.paths.microbit_path then
+      print(P.messages.no_microbit_board)
+    else
+      return f(...)
+    end
+  end
+
+  project_env.require          = function(name)
     return project_require(name)
   end
-  project_env.dofile          = function(name)
+  project_env.dofile           = function(name)
     return check_open_pr(function()
       return project_dofile(cc, name, cc:get_project_env())
     end)
@@ -1358,7 +1392,7 @@ function ConsoleController.prepare_project_env(cc)
 
   --- project management
 
-  project_env.list_projects   = function()
+  project_env.list_projects    = function()
     local ps = P:list()
     if ps:is_empty() then
       -- no projects, display a message about it
@@ -1374,15 +1408,15 @@ function ConsoleController.prepare_project_env(cc)
   end
 
   --- @param name string
-  project_env.project         = function(name)
+  project_env.project          = function(name)
     return cc:open_project(name)
   end
 
-  project_env.close_project   = function()
+  project_env.close_project    = function()
     close_project(cc)
   end
 
-  project_env.current_project = function()
+  project_env.current_project  = function()
     if P.current and P.current.name then
       print('Currently open project: ' .. P.current.name)
     else
@@ -1397,20 +1431,20 @@ function ConsoleController.prepare_project_env(cc)
     end
   end
 
-  project_env.clone           = function(old, new)
+  project_env.clone            = function(old, new)
     local ok, err = P:clone(old, new)
     if not ok then
       print(err)
     end
   end
 
-  project_env.reset_scratch   = function()
+  project_env.reset_scratch    = function()
     cc:reset_scratch()
   end
 
   --- file access
 
-  project_env.list_contents   = function()
+  project_env.list_contents    = function()
     return check_open_pr(function()
       local p = P.current
       local items = p:contents()
@@ -1423,30 +1457,41 @@ function ConsoleController.prepare_project_env(cc)
 
   --- @param name string
   --- @return string?
-  project_env.readfile        = function(name)
+  project_env.readfile         = function(name)
     return check_open_pr(cc._readfile, cc, name)
   end
 
   --- @param name string
   --- @return string[]?
-  project_env.readlines       = function(name)
+  project_env.readlines        = function(name)
     return check_open_pr(cc._readlines, cc, name)
   end
 
   --- @param name string
   --- @param content string[]
-  project_env.writefile       = function(name, content)
+  project_env.writefile        = function(name, content)
     return check_open_pr(cc.writefile, cc, name, content)
+  end
+
+  --- @param content string
+  project_env.flash_microbit   = function(content)
+    return check_microbit_path(cc.flash_microbit, cc, content)
+  end
+
+  --- re-run USB device detection (hot-plug after startup)
+  --- @return string? path
+  project_env.detect_microbit  = function()
+    return cc.detect_microbit(cc)
   end
 
   --- @param name string
   --- @return function? chunk
-  project_env.loadfile        = function(name)
+  project_env.loadfile         = function(name)
     return check_open_pr(cc.loadfile, cc, name)
   end
 
   --- @param name string
-  project_env.edit            = function(name)
+  project_env.edit             = function(name)
     return check_open_pr(cc.edit, cc, name)
   end
 
@@ -1463,19 +1508,19 @@ function ConsoleController.prepare_project_env(cc)
   --- execution control
 
   --- @param name string?
-  project_env.run_project     = function(name)
+  project_env.run_project      = function(name)
     cc:run_project(name)
   end
-  project_env.run             = project_env.run_project
+  project_env.run              = project_env.run_project
 
   --- @param msg string?
-  project_env.pause           = function(msg)
+  project_env.pause            = function(msg)
     cc:suspend_run(msg)
   end
-  project_env.stop            = function()
+  project_env.stop             = function()
     cc:stop_project_run()
   end
-  project_env.continue        = function()
+  project_env.continue         = function()
     if love.state.app_state == 'inspect' then
       -- resume
       love.state.app_state = 'running'
@@ -1485,7 +1530,7 @@ function ConsoleController.prepare_project_env(cc)
     end
   end
 
-  local terminal              = cc.model.output.terminal
+local terminal              = cc.model.output.terminal
   require('model.serial.init')
   if love.system.getOS() == 'Android' then
     require('model.serial.backend_android')
@@ -1819,8 +1864,8 @@ function ConsoleController:reset_scratch()
   if P.current and P.current.name == name then
     self:_close_project()
   else
-    self:close_project()    --- lands on scratch
-    self:_close_project()   --- close it directly (no redirect)
+    self:close_project()  --- lands on scratch
+    self:_close_project() --- close it directly (no redirect)
   end
   local ok, err = P:remove(name)
   if not ok then

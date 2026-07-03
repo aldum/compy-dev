@@ -202,4 +202,44 @@ describe('ProjectService #project', function()
       assert.is_nil(PS.current)
     end)
   end)
+
+  describe('flash_microbit', function()
+    it('refuses empty data #project', function()
+      PS:opreate(ProjectService.DEFAULT)
+      love.paths.microbit_path = tmp .. '/microbit'
+      local ok, err = PS.current:flash_microbit('')
+      assert.is_false(ok)
+      assert.is_not_nil(err)
+    end)
+
+    it('writes microbit.hex to the detected device root #project', function()
+      local ddir = tmp .. '/microbit'
+      lfs.mkdir(ddir)
+      love.paths.microbit_path = ddir
+      PS:opreate(ProjectService.DEFAULT)
+      local ok, err = PS.current:flash_microbit(':firmware:data:')
+      assert.is_true(ok)
+      assert.is_nil(err)
+      local hex = FS.join_path(ddir, 'microbit.hex')
+      assert.is_true(FS.exists(hex))
+      local content = FS.combined_read(hex)
+      assert.are.equal(':firmware:data:', content)
+      --- no temp file left behind (temp has no extension, so it
+      --- can't be mistaken for a hex flash by the micro:bit)
+      for entry in lfs.dir(ddir) do
+        if entry ~= '.' and entry ~= '..' then
+          assert.is_true(entry == 'microbit.hex',
+            'unexpected leftover: ' .. entry)
+        end
+      end
+    end)
+
+    it('reports when no device is present #project', function()
+      love.paths.microbit_path = nil
+      PS:opreate(ProjectService.DEFAULT)
+      local ok, err = PS.current:flash_microbit('data')
+      assert.is_false(ok)
+      assert.is_not_nil(err)
+    end)
+  end)
 end)

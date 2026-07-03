@@ -1,6 +1,7 @@
 require("util.lua")
 require("util.string.string")
 local FS = require("util.filesystem")
+local OS = require("util.os")
 local class = require('util.class')
 
 local function error_annot(base)
@@ -42,6 +43,8 @@ local messages = {
     return n .. ' does not exist'
   end,
   no_open_project     = 'No project is open',
+  no_microbit_board   = 'No micro:bit is plugged in',
+  flash_no_data       = 'No firmware data to flash',
 }
 
 --- Determine if the supplied string is a valid filename
@@ -150,6 +153,46 @@ end
 --- @return string? path
 function Project:get_path(name)
   return FS.join_path(self.path, name)
+end
+
+--- Flash a .hex firmware to the micro:bit.
+--- Uses the device path detected at startup (or refreshed
+--- on-demand via project_env.detect_microbit). Writes to a temp
+--- file (no extension) on the device root, syncs, then atomically
+--- renames to microbit.hex.
+--- @param data string
+--- @return boolean success
+--- @return string? error
+function Project:flash_microbit(data)
+  if type(data) ~= 'string' or data == '' then
+    return false, messages.flash_no_data
+  end
+  local path = (type(love) == 'table' and love.paths)
+      and love.paths.microbit_path or nil
+  if not path then
+    return false, messages.no_microbit_board
+  end
+
+  local tmpname = string.format('.tmp_microbit_%d', math.random(100000, 999999))
+  local tmppath = FS.join_path(path, tmpname)
+  local wok, werr = FS.write(tmppath, data)
+  if not wok then
+    return false, werr
+  end
+
+  --- make sure the copy actually reached the device before the
+  --- micro:bit re-enumerates the drive
+  if OS.get_name() == 'Linux' then
+    OS.runcmd('sync')
+  end
+
+  local hexpath = FS.join_path(path, 'microbit.hex')
+  local rok, rerr = FS.rename(tmppath, hexpath)
+  if not rok then
+    FS.rm(tmppath)
+    return false, rerr
+  end
+  return true
 end
 
 local newps = function()
