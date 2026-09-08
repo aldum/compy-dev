@@ -530,10 +530,11 @@ Controller = {
     handlers.keypressed = function(k)
       --- Power shortcuts
       local function quickswitch()
+        if playback then return end
         if Key.ctrl() and not Key.alt() and k == 't' then
           if love.state.app_state == 'running'
               or love.state.app_state == 'inspect'
-              or love.state.app_state == 'project_open'
+              or love.state.app_state == 'ready'
           then
             CC:stop_project_run()
             local st = love.state.editor
@@ -552,6 +553,8 @@ Controller = {
         end
       end
       local function project_state_change()
+        --- no console or project switching in playback mode
+        if playback then return end
         if Key.ctrl() then
           if k == "pause" then
             CC:suspend_run(messages.user_break)

@@ -122,7 +122,6 @@
 --- | 'starting'
 --- | 'title'
 --- | 'ready'
---- | 'project_open'
 --- | 'editor'
 --- | 'running'
 --- | 'inspect'

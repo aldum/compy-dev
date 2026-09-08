@@ -17,7 +17,8 @@ local FS = require("util.filesystem")
 
 require("lib.error_explorer")
 
-local gfx = love.graphics
+--- global on purpose: view modules use bare `gfx`
+gfx = love.graphics
 
 local messages = {
   how_to_exit = 'Press Ctrl-Esc to exit',
@@ -375,6 +376,9 @@ function love.load()
       print(messages.dataloss_warning)
       CM.projects:deploy_examples()
     end
+
+    --- always have a project open
+    CC:open_project(ProjectService.DEFAULT)
 
     --- run autotest on startup if invoked
     if autotest then CC:autotest() end

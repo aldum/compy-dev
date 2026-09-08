@@ -21,7 +21,6 @@ local messages = {
 --- @field time number
 --- @field model Model
 --- @field main_ctrl table
---- @field main_env LuaEnv
 --- @field pre_env LuaEnv
 --- @field base_env LuaEnv
 --- @field project_env LuaEnv
@@ -37,8 +36,7 @@ ConsoleController = class.create()
 
 --- @param M Model
 function ConsoleController.new(M, main_ctrl)
-  local env = getfenv()
-  local pre_env = table.clone(env)
+  local pre_env = table.clone(getfenv())
   local config = M.cfg
   pre_env.font = config.view.font
   local IC = UserInputController(M.input)
@@ -47,8 +45,6 @@ function ConsoleController.new(M, main_ctrl)
     model       = M,
     main_ctrl   = main_ctrl,
     input       = IC,
-    -- console runner env
-    main_env    = env,
     -- copy of the application's env before the prep
     pre_env     = pre_env,
     -- the project env where we make the API available
@@ -66,8 +62,7 @@ function ConsoleController.new(M, main_ctrl)
   --- the editor has to know about us
   local EC = EditorController(M.editor, self)
   self.editor = EC
-  -- initialize the stub env tables
-  ConsoleController.prepare_env(self)
+  -- initialize the user environment
   ConsoleController.prepare_project_env(self)
 
   return self
@@ -253,11 +248,11 @@ function ConsoleController:run_project(name)
       love.state.app_state = 'running'
       local rok, run_err = run_user_code(f, self, path)
       if not rok then
-        love.state.app_state = 'project_open'
+        love.state.app_state = 'ready'
         print('Error: ', run_err)
       else
         if not self.main_ctrl.user_is_blocking() then
-          love.state.app_state = 'project_open'
+          love.state.app_state = 'ready'
         end
       end
     else
@@ -338,18 +333,24 @@ local get_compy_namespace = function(terminal)
   }
 end
 
-function ConsoleController.prepare_env(cc)
-  local prepared            = cc.main_env
-  prepared.gfx              = love.graphics
+--- Prepare the unified user environment: console commands and
+--- project API both live here. The console the user types into is
+--- simply the currently open project's environment.
+--- @param cc ConsoleController
+function ConsoleController.prepare_project_env(cc)
+  require("controller.userInputController")
+  require("model.input.userInputModel")
+  require("view.input.userInputView")
+  local cfg                   = cc.model.cfg
+  ---@type table
+  local project_env           = cc:get_pre_env_c()
 
-  local P                   = cc.model.projects
+  local P                     = cc.model.projects
 
-  prepared.require          = function(name)
-    return project_require(name)
-  end
+  project_env.gfx             = love.graphics
 
   --- @param f function
-  local check_open_pr       = function(f, ...)
+  local check_open_pr         = function(f, ...)
     if not P.current then
       print(P.messages.no_open_project)
     else
@@ -357,15 +358,18 @@ function ConsoleController.prepare_env(cc)
     end
   end
 
-  prepared.require          = project_require
-
-  prepared.dofile           = function(name)
+  project_env.require         = function(name)
+    return project_require(name)
+  end
+  project_env.dofile          = function(name)
     return check_open_pr(function()
-      return project_dofile(cc, name)
+      return project_dofile(cc, name, cc:get_project_env())
     end)
   end
 
-  prepared.list_projects    = function()
+  --- project management
+
+  project_env.list_projects   = function()
     local ps = P:list()
     if ps:is_empty() then
       -- no projects, display a message about it
@@ -381,17 +385,15 @@ function ConsoleController.prepare_env(cc)
   end
 
   --- @param name string
-  local open_project        = function(name)
+  project_env.project         = function(name)
     return cc:open_project(name)
   end
 
-  prepared.project          = open_project
-
-  prepared.close_project    = function()
+  project_env.close_project   = function()
     close_project(cc)
   end
 
-  prepared.current_project  = function()
+  project_env.current_project = function()
     if P.current and P.current.name then
       print('Currently open project: ' .. P.current.name)
     else
@@ -399,21 +401,27 @@ function ConsoleController.prepare_env(cc)
     end
   end
 
-  prepared.example_projects = function()
+  project_env.example_projects = function()
     local ok, err = P:deploy_examples()
     if not ok then
       print('err: ' .. err)
     end
   end
 
-  prepared.clone            = function(old, new)
+  project_env.clone           = function(old, new)
     local ok, err = P:clone(old, new)
     if not ok then
       print(err)
     end
   end
 
-  prepared.list_contents    = function()
+  project_env.reset_scratch   = function()
+    cc:reset_scratch()
+  end
+
+  --- file access
+
+  project_env.list_contents   = function()
     return check_open_pr(function()
       local p = P.current
       local items = p:contents()
@@ -426,102 +434,40 @@ function ConsoleController.prepare_env(cc)
 
   --- @param name string
   --- @return string?
-  prepared.readfile         = function(name)
-    return check_open_pr(cc._readfile, cc, name)
-  end
-
-  --- @param name string
-  --- @return function? chunk
-  prepared.loadfile         = function(name)
-    return check_open_pr(cc.loadfile, cc, name)
-  end
-
-  --- @param name string
-  --- @return string[]?
-  prepared.readlines        = function(name)
-    return check_open_pr(cc._readlines, cc, name)
-  end
-
-  --- @param name string
-  --- @param content string[]
-  prepared.writefile        = function(name, content)
-    return check_open_pr(cc.writefile, cc, name, content)
-  end
-
-  --- @param name string
-  prepared.edit             = function(name)
-    return check_open_pr(cc.edit, cc, name)
-  end
-
-  prepared.run_project      = function(name)
-    cc:run_project(name)
-  end
-
-  local terminal            = cc.model.output.terminal
-  local compy_namespace     = get_compy_namespace(terminal)
-  prepared.compy            = compy_namespace
-  prepared.tty              = compy_namespace.terminal
-
-  prepared.run              = prepared.run_project
-
-  prepared.eval             = LANG.eval
-  prepared.print_eval       = LANG.print_eval
-
-  prepared.appver           = function()
-    local ver = FS.read('ver.txt', true)
-    if ver then print(ver) end
-  end
-
-  prepared.quit             = function()
-    love.event.quit()
-  end
-end
-
---- API functions for the user
---- @param cc ConsoleController
-function ConsoleController.prepare_project_env(cc)
-  require("controller.userInputController")
-  require("model.input.userInputModel")
-  require("view.input.userInputView")
-  local cfg                   = cc.model.cfg
-  ---@type table
-  local project_env           = cc:get_pre_env_c()
-
-  project_env.require         = function(name)
-    return project_require(name)
-  end
-  project_env.dofile          = function(name)
-    return project_dofile(cc, name, cc:get_project_env())
-  end
-  -- project_env.require         = function(name)
-  --   return project_require(name, 'run')
-  -- end
-
-  --- @param name string
-  --- @return string?
   project_env.readfile        = function(name)
-    --- @diagnostic disable-next-line: invisible
-    return cc:_readfile(name)
+    return check_open_pr(cc._readfile, cc, name)
   end
 
   --- @param name string
   --- @return string[]?
   project_env.readlines       = function(name)
-    --- @diagnostic disable-next-line: invisible
-    return cc:_readlines(name)
+    return check_open_pr(cc._readlines, cc, name)
   end
 
   --- @param name string
   --- @param content string[]
-  project_env.writefile = function(name, content)
-    return cc:writefile(name, content)
+  project_env.writefile       = function(name, content)
+    return check_open_pr(cc.writefile, cc, name, content)
   end
 
   --- @param name string
   --- @return function? chunk
-  project_env.loadfile         = function(name)
-    return cc:loadfile(name)
+  project_env.loadfile        = function(name)
+    return check_open_pr(cc.loadfile, cc, name)
   end
+
+  --- @param name string
+  project_env.edit            = function(name)
+    return check_open_pr(cc.edit, cc, name)
+  end
+
+  --- execution control
+
+  --- @param name string?
+  project_env.run_project     = function(name)
+    cc:run_project(name)
+  end
+  project_env.run             = project_env.run_project
 
   --- @param msg string?
   project_env.pause           = function(msg)
@@ -530,14 +476,6 @@ function ConsoleController.prepare_project_env(cc)
   project_env.stop            = function()
     cc:stop_project_run()
   end
-  project_env.run             = function()
-    if love.state.app_state == 'inspect' then
-      cc:stop_project_run()
-      cc:run_project()
-    end
-  end
-  project_env.run_project     = project_env.run
-
   project_env.continue        = function()
     if love.state.app_state == 'inspect' then
       -- resume
@@ -546,10 +484,6 @@ function ConsoleController.prepare_project_env(cc)
     else
       print('No project halted')
     end
-  end
-
-  project_env.close_project   = function()
-    close_project(cc)
   end
 
   local ui_model, ui_con, input_ref
@@ -616,20 +550,23 @@ function ConsoleController.prepare_project_env(cc)
     end
   end
 
-  --- @param name string
-  project_env.edit           = function(name)
-    return cc:edit(name)
-  end
-
-  project_env.gfx            = love.graphics
-
   local terminal             = cc.model.output.terminal
   local compy_namespace      = get_compy_namespace(terminal)
-  compy_namespace.text_input = input_text
+  compy_namespace.text_input = project_env.input_text
   project_env.compy          = compy_namespace
+  project_env.tty            = compy_namespace.terminal
 
   project_env.eval           = LANG.eval
   project_env.print_eval     = LANG.print_eval
+
+  project_env.appver         = function()
+    local ver = FS.read('ver.txt', true)
+    if ver then print(ver) end
+  end
+
+  project_env.quit           = function()
+    love.event.quit()
+  end
 
   local base                 = table.clone(project_env)
   local project              = table.clone(project_env)
@@ -664,12 +601,7 @@ function ConsoleController:evaluate_input()
   if eval and eval.parser then
     if eval_ok then
       local code = string.unlines(text)
-      local run_env = (function()
-        if love.state.app_state == 'inspect' then
-          return self:get_project_env()
-        end
-        return self:get_console_env()
-      end)()
+      local run_env = self:get_project_env()
       local f, load_err = codeload(code, run_env)
       if f then
         local _, err = run_user_code(f, self)
@@ -711,11 +643,6 @@ function ConsoleController:get_pre_env_c()
 end
 
 ---@return LuaEnv
-function ConsoleController:get_console_env()
-  return self.main_env
-end
-
----@return LuaEnv
 function ConsoleController:get_project_env()
   return self.project_env
 end
@@ -727,14 +654,7 @@ end
 
 ---@return LuaEnv
 function ConsoleController:get_effective_env()
-  if
-      love.state.app_state == 'running'
-      or love.state.app_state == 'inspect'
-  then
-    return self:get_project_env()
-  else
-    return self:get_console_env()
-  end
+  return self:get_project_env()
 end
 
 ---@param t LuaEnv
@@ -787,7 +707,9 @@ function ConsoleController:open_project(name, play)
   end
   local cur = P.current
   if cur then
-    self:close_project()
+    --- close directly: no redirect to the default project here,
+    --- otherwise its loader would be inserted and leak
+    self:_close_project()
   end
 
   local open, create, err = P:opreate(name, play)
@@ -803,7 +725,8 @@ function ConsoleController:open_project(name, play)
     then
       table.insert(package.loaders, 1, project_loader)
     end
-    love.state.app_state = 'project_open'
+    --- env resets on every project switch
+    self:_reset_executor_env()
   end
   if open then
     print('Project ' .. name .. ' opened')
@@ -815,8 +738,9 @@ function ConsoleController:open_project(name, play)
   return ok
 end
 
+--- Close the current project without opening another.
 --- @return boolean success
-function ConsoleController:close_project()
+function ConsoleController:_close_project()
   local P = self.model.projects
   local open = P.current
   if open then
@@ -826,13 +750,21 @@ function ConsoleController:close_project()
     if lf then
       table.delete_by_value(package.loaders, lf)
     end
-    self:_reset_executor_env()
     self.model.output:clear_canvas()
     View.clear_snapshot()
-    love.state.app_state = 'ready'
     return ok
   end
   return true
+end
+
+--- Close the current project and return to the default project.
+--- @return boolean success
+function ConsoleController:close_project()
+  local ok = self:_close_project()
+  if ok then
+    return self:open_project(ProjectService.DEFAULT)
+  end
+  return ok
 end
 
 --- @return Project?
@@ -866,7 +798,7 @@ function ConsoleController:stop_project_run()
   self.main_ctrl.set_love_draw(self, self.view)
   self.main_ctrl.clear_user_handlers()
   self.main_ctrl.report()
-  love.state.app_state = 'project_open'
+  love.state.app_state = 'ready'
 end
 
 function ConsoleController:quit_project()
@@ -874,6 +806,24 @@ function ConsoleController:quit_project()
   self:close_project()
   self.model.output:reset()
   self.input:reset()
+end
+
+--- Delete the default project and recreate it with factory contents.
+--- @return boolean success
+function ConsoleController:reset_scratch()
+  local P = self.model.projects
+  local name = ProjectService.DEFAULT
+  if P.current and P.current.name == name then
+    self:_close_project()
+  else
+    self:close_project()    --- lands on scratch
+    self:_close_project()   --- close it directly (no redirect)
+  end
+  local ok, err = P:remove(name)
+  if not ok then
+    print(err)
+  end
+  return self:open_project(name)
 end
 
 --- @param name string
