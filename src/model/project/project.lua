@@ -177,6 +177,7 @@ end
 ProjectService = class.create(newps)
 ProjectService.MAIN = 'main.lua'
 ProjectService.README = 'README.md'
+ProjectService.DEFAULT = 'scratch'
 ProjectService.messages = messages
 
 --- @param name string
@@ -363,6 +364,28 @@ function ProjectService:clone(old, new)
     return false, err
   end
   return true
+end
+
+--- Recursively delete a project directory.
+--- Does NOT check whether the project is currently open;
+--- the caller is expected to close it first.
+--- @param name string
+--- @return boolean success
+--- @return string? error
+function ProjectService:remove(name)
+  local ok, v_err = validate_filename(name)
+  if not ok then
+    return false, v_err
+  end
+  local p_path, p_err = self.is_project(ProjectService.path, name)
+  if not p_path then
+    return false, p_err
+  end
+  if FS.rm then
+    return FS.rm(p_path)
+  end
+  -- non-love FS branch lacks recursive delete
+  return false, 'remove not supported in this environment'
 end
 
 --- @param name string
