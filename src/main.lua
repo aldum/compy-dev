@@ -354,6 +354,21 @@ function love.load()
   end
   local ctrl = Controller
   --- MVC wiring
+  -- The reusable seam now exists (free-function `dispatch` +
+  -- the `build_widget_api` factory in consoleController.lua),
+  -- so console/editor COULD rewire onto it. They stay on their
+  -- own separate `UserInputController` instances anyway,
+  -- because console's `inspect`-mode REPL state must persist
+  -- independently of the project's (doc/development/internals/
+  -- user_input.md, "inspect mode") — a single shared instance
+  -- would be clobbered across that boundary. Migration is
+  -- therefore deliberately deferred (D-ROUTE-OWNS), not
+  -- blocked. The PROJECT's widget is not built here at all: it
+  -- lives for one project run and is constructed at the run
+  -- seam (consoleController.lua, run_project; D-WIDGET-AT-BOOT
+  -- as amended). Between runs
+  -- `love.state.user_input_controller` is nil, and every
+  -- consumer of it resolves it dynamically and guards.
   local CM = ConsoleModel(baseconf)
   redirect_to(CM)
   local CC = ConsoleController(CM, ctrl)

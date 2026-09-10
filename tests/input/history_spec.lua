@@ -1,5 +1,6 @@
 --- @diagnostic disable: invisible
 require("model.input.history")
+local F = require('tests.helpers.input_fixture')
 
 if not orig_print then
   --- @diagnostic disable: duplicate-set-field
@@ -98,5 +99,24 @@ describe('history #history', function()
     assert.same(3, history.index)
     assert.is_false(ok)
     assert.same(nil, cur)
+  end)
+end)
+
+-- End-to-end, the way a user reaches it: the console input is
+-- single-line, so Up hits the vertical limit at once and the
+-- widget reports that through on_limit_reached, which the
+-- console maps to history_back
+-- (doc/development/decisions/input.md, D-EDIT-CALLBACKS).
+describe('console history navigation #input #history',
+  function()
+  setup(function() F.setup() end)
+  teardown(function() F.teardown() end)
+  before_each(function() F.reset() end)
+
+  it('Up at the vertical limit recalls the last entry',
+    function()
+    F.console.model.history:remember({ 'foo' })
+    F.session.press('up')
+    assert.same({ 'foo' }, F.console:get_text())
   end)
 end)

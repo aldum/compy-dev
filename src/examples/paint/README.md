@@ -189,14 +189,16 @@ Note the _x_ coordinate, which is offset by `box_w` (the width of the side panel
 There's one more challenge to tackle: with touch, we don't have second button, no right-click. If we want a secondary use case (like setting the background color instead of the foreground), we have to come up with some other way.
 Double clicks/taps are a workable solution, but there is a problem: detecting them is not trivial. Any second click is necessarily preceded by a first one, so you need to kind of hold off on doing anything and wait to see if a second tap follows.
 
-To solve for this, we created custom handlers for single and double clicks:
+To solve for this, the framework derives single and double click
+events from the raw presses and delivers them like any other
+input event, so you bind them the same way:
 
 ```lua
-function compy.singleclick(x, y)
+compy.input.hooks.singleclick = function(x, y)
   point(x, y, 1)
 end
 
-function compy.doubleclick(x, y)
+compy.input.hooks.doubleclick = function(x, y)
   point(x, y, 2)
 end
 ```

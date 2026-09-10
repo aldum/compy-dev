@@ -36,7 +36,7 @@ function load_example(ex)
     body = ex.code
     setupTixy()
     legend = ex.legend
-    write_to_input(body)
+    compy.input.set_text(body)
   end
 end
 
@@ -168,31 +168,63 @@ function love.draw()
   drawText()
 end
 
-r = user_input()
+-- Continuous-session idiom (doc/input_api.md, "Submit
+-- lifecycle"): consume the submitted code in on_text_entered.
+-- The widget stays shown by default, and this project turns the
+-- submit clear OFF (configured below, before the first show):
+-- editing the running body in place is the whole demo, so the
+-- just-submitted code must still be sitting there afterwards.
+-- With that, after_submit has nothing left to do and is gone.
+local function submit_body(text)
+  body = text
+  setupTixy()
+  legend = ""
+end
+
+-- Escape destroys nothing by default, so this callback is not a
+-- repair any more — it is what Escape MEANS here: revert the
+-- strip to the last body that actually ran. The widget is still
+-- standing when it runs, so the reverted text is on screen.
+compy.input.callbacks.after_cancel = function()
+  compy.input.set_text(string.lines(body))
+end
 
 function love.update(dt)
   time = time + dt
-  if r:is_empty() then
-    input_code("function tixy(t, i, x, y)", string.lines(body))
-  else
-    local ret = r()
-    body = string.unlines(ret)
-    setupTixy()
-    legend = ""
-  end
 end
 
-function love.mousepressed(_, _, button)
+-- A hook rather than love.mousepressed, because this project
+-- shows the widget below it: a handler captured from love.*
+-- consumes its channel outright, and a hook decides per event
+-- (doc/input_api.md, "Event hooks and shortcuts — when to use
+-- which"). The two buttons this game uses are claimed; any
+-- other goes on to the widget.
+compy.input.hooks.mousepressed = function(_, _, button)
   if button == 1 then
     if Key.shift() then
       retreat()
     else
       advance()
     end
+    return true
   end
   if button == 2 then
     randomize()
+    return true
   end
 end
 
 advance()
+
+-- Set this program's lifecycle once, before the first show
+-- (doc/input_api.md, "Submit lifecycle"): the submitted body
+-- stays in the strip so it can be edited and re-run.
+compy.input.configure{ clear_on_submit = false }
+
+compy.input.show{
+  prompt = "function tixy(t, i, x, y)",
+  text = string.lines(body),
+  highlighter = LuaHighlighter,
+  validator = LuaSyntaxValidator,
+  on_text_entered = submit_body,
+}

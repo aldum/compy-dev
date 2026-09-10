@@ -1,6 +1,7 @@
 require("model.input.inputText")
 require("model.input.selection")
 require("model.input.history")
+require("model.input.editHistory")
 require("model.lang.lua.error")
 require("view.editor.visibleContent")
 
@@ -12,9 +13,9 @@ require("util.debug")
 require("util.lua")
 
 --- @class UserInputModel
---- @field oneshot boolean
 --- @field entered InputText
 --- @field history History
+--- @field edit_history EditHistory
 --- @field evaluator Evaluator
 --- @field cursor Cursor
 --- @field error string[]?
@@ -42,13 +43,17 @@ UserInputModel = class.create()
 
 --- @param cfg Config
 --- @param eval Evaluator
---- @param oneshot boolean?
 --- @param custom_label string?
-function UserInputModel.new(cfg, eval, oneshot, custom_label)
+--- @param editing boolean? --- the editor's rich input:
+--- word deletion (2.7) and the text-level undo (1.1).
+--- Off everywhere else — the console, project inputs and
+--- search keep the plain widget.
+function UserInputModel.new(cfg, eval, custom_label, editing)
   local self = setmetatable({
-    oneshot = oneshot,
+    editing = editing or false,
     entered = InputText(),
     history = History(cfg.input_history),
+    edit_history = EditHistory(32),
     evaluator = eval,
     cursor = Cursor(),
     selection = InputSelection(),
@@ -100,9 +105,73 @@ end
 ----------------
 
 --- @param text string
+--- @private
+--- @return table --- {text, cursor} for the edit history
+function UserInputModel:_edit_snapshot()
+  local cl, cc = self:get_cursor_pos()
+  return {
+    text = table.clone(self:get_text()),
+    cursor = { l = cl, c = cc },
+  }
+end
+
+--- @private
+--- Record the pre-mutation state in the edit history
+--- @param kind string
+--- @param boundary boolean?
+function UserInputModel:_record_edit(kind, boundary)
+  if not self.editing then return end
+  self.edit_history:record(
+    self:_edit_snapshot(), kind, boundary or false)
+end
+
+--- @private
+--- Remember where the mutation left the cursor
+function UserInputModel:_note_edit()
+  if not self.editing then return end
+  local cl, cc = self:get_cursor_pos()
+  self.edit_history:note_cursor(cl, cc)
+end
+
+--- Undo one edit step inside the open block (1.1)
+--- @return boolean --- false when there is nothing to undo
+function UserInputModel:undo_edit()
+  local snap = self.edit_history:undo(self:_edit_snapshot())
+  if not snap then return false end
+  self:_apply_edit_snapshot(snap)
+  return true
+end
+
+--- Redo one edit step
+--- @return boolean --- false when there is nothing to redo
+function UserInputModel:redo_edit()
+  local snap = self.edit_history:redo(self:_edit_snapshot())
+  if not snap then return false end
+  self:_apply_edit_snapshot(snap)
+  return true
+end
+
+--- @private
+--- @param snap table
+function UserInputModel:_apply_edit_snapshot(snap)
+  self.entered = InputText(table.clone(snap.text))
+  self:text_change()
+  self:move_cursor(snap.cursor.l, snap.cursor.c)
+  self:clear_selection()
+end
+
 function UserInputModel:add_text(text)
   if type(text) == 'string' then
     text = sanitize_utf8(text)
+    local single = string.ulen(text) == 1
+    if single then
+      --- a whitespace starts a new step, so undo eats
+      --- word by word, not letter by letter
+      self:_record_edit('insert',
+        string.match(text, '^%s$') ~= nil)
+    else
+      self:_record_edit('paste', true)
+    end
     self:pop_selected_text()
     local sl, cc    = self:get_cursor_pos()
     local cur_line  = self:get_text_line(sl)
@@ -134,33 +203,49 @@ function UserInputModel:add_text(text)
       self:move_cursor(last_line_i, string.ulen(ll) + 1)
     end
     self:text_change()
+    self:_note_edit()
   end
 end
 
+--- Normalise either spelling of the content shape -- a string,
+--- or a list of line strings -- to one list of lines, so the
+--- caller has a single path. Sanitise for UTF-8, then split on
+--- newlines; string.lines takes either spelling, and over a
+--- list it keeps empty elements, so a blank line survives.
+--- Anything else yields nil, which leaves content standing.
+--- @param text str
+--- @return string[]?
+local function normalized_lines(text)
+  if type(text) == 'string' then
+    return string.lines(sanitize_utf8(text))
+  end
+  if type(text) ~= 'table' then return end
+  local clean = {}
+  for i, l in ipairs(text) do
+    clean[i] = sanitize_utf8(l)
+  end
+  return string.lines(clean)
+end
+
+--- Both spellings normalise identically, so the cursor's
+--- (line, column) address is unambiguous over whatever is
+--- stored (doc/development/decisions/input.md, D-CONTENT-NORM).
 --- @param text str
 --- @param keep_cursor boolean
 function UserInputModel:set_text(text, keep_cursor)
-  if type(text) == 'string' then
-    text = sanitize_utf8(text)
-    local lines = string.lines(text)
-    local n_added = #lines
-    if n_added == 1 then
-      self.entered = InputText({ text })
-    end
-    if not keep_cursor then
-      self:_update_cursor(true)
-    end
-  elseif type(text) == 'table' then
-    local clean = {}
-    for i, l in ipairs(text) do
-      clean[i] = sanitize_utf8(l)
-    end
-    self.entered = InputText(clean)
+  --- programmatic content is a new baseline: the text
+  --- level lives only inside one edit block (#45, spec 1.1)
+  self.edit_history:reset()
+  local lines = normalized_lines(text)
+  if lines then
+    self.entered = InputText(lines)
   end
   self:text_change()
-  if not keep_cursor then
-    self:init_visible(self.entered)
+  if keep_cursor then
+    self:_clamp_cursor_pos()
+    return
   end
+  self:init_visible(self.entered)
   self:jump_end()
 end
 
@@ -196,6 +281,7 @@ end
 
 --- @param ln integer?
 function UserInputModel:delete_line(ln)
+  self:_record_edit('remove_line', true)
   local n = self:get_n_text_lines()
   if n == 1 then
     self:clear_input()
@@ -203,6 +289,7 @@ function UserInputModel:delete_line(ln)
     local l = ln or self:get_cursor_y()
     self:_drop_text_line(l)
   end
+  self:_note_edit()
 end
 
 --- @param text string
@@ -244,6 +331,7 @@ function UserInputModel:swap_lines(ln_that, ln_this)
 end
 
 function UserInputModel:line_feed()
+  self:_record_edit('newline', true)
   local cl, cc = self:get_cursor_pos()
   local cur_line = self:get_text_line(cl)
   local pre, post = string.split_at(cur_line, cc)
@@ -251,6 +339,7 @@ function UserInputModel:line_feed()
   self:insert_text_line(post, cl + 1)
   self:move_cursor(cl + 1, 1)
   self:text_change()
+  self:_note_edit()
 end
 
 --- @return InputText
@@ -305,6 +394,7 @@ function UserInputModel:paste(text)
 end
 
 function UserInputModel:backspace()
+  self:_record_edit('remove')
   self:pop_selected_text()
   local line = self:get_current_line()
   local cl, cc = self:get_cursor_pos()
@@ -332,9 +422,48 @@ function UserInputModel:backspace()
     self:cursor_left()
   end
   self:text_change()
+  self:_note_edit()
+end
+
+--- Start of the word ending at column cc (spec 2.7:
+--- Ctrl+Backspace / Ctrl+W). Whitespace before the
+--- cursor is eaten with the word, as readline does.
+--- @param line string
+--- @param cc integer --- cursor column
+--- @return integer --- the column the word starts at
+local function word_start(line, cc)
+  local i = cc - 1
+  while i > 1 and string.usub(line, i - 1, i - 1) == ' ' do
+    i = i - 1
+  end
+  while i > 1 do
+    local ch = string.usub(line, i - 1, i - 1)
+    if ch == ' ' then break end
+    i = i - 1
+  end
+  return i
+end
+
+--- Delete the word before the cursor; at the line's
+--- start it falls back to joining lines
+function UserInputModel:backspace_word()
+  self:_record_edit('remove_word', true)
+  self:pop_selected_text()
+  local line = self:get_current_line()
+  local cl, cc = self:get_cursor_pos()
+  if cc == 1 then return self:backspace() end
+
+  local ws = word_start(line, cc)
+  local pre = string.usub(line, 1, ws - 1)
+  local post = string.usub(line, cc)
+  self:_set_text_line(pre .. post, cl, true)
+  self:move_cursor(cl, ws)
+  self:text_change()
+  self:_note_edit()
 end
 
 function UserInputModel:delete()
+  self:_record_edit('remove')
   self:pop_selected_text()
   local line = self:get_current_line()
   local cl, cc = self:get_cursor_pos()
@@ -359,6 +488,7 @@ function UserInputModel:delete()
   local nval = (pre or '') .. (post or '')
   self:_set_text_line(nval, cl, true)
   self:text_change()
+  self:_note_edit()
 end
 
 function UserInputModel:clear_input()
@@ -405,10 +535,16 @@ function UserInputModel:highlight()
       hl = ev.highlighter(text)
     end
 
-    self._memo.highlight = { hl = hl, parse_err = parse_err }
+    -- hl stays indexable even with no highlighter (parser but
+    -- no colouring): the view indexes highlight.hl
+    -- unconditionally.
+    self._memo.highlight = { hl = hl or {}, parse_err = parse_err }
   else
     if ev.highlighter then
-      self._memo.highlight = { hl = ev.highlighter(text) }
+      -- same invariant as the parser branch above: a
+      -- highlighter that returns nil must not leave `.hl` nil
+      -- for the view to index
+      self._memo.highlight = { hl = ev.highlighter(text) or {} }
     else
       self._memo.highlight = ev:validation_hl(text)
     end
@@ -427,8 +563,15 @@ end
 ----------------
 
 --- @return boolean
+-- doc/development/internals/user_input.md, "Submit and cancel —
+-- widget-owned callback sequences": oneshot is gone, so nothing
+-- distinguishes a single-use solicitation from any other
+-- model anymore. Only the (never-history-reading) project
+-- widget set oneshot=true, so suppression here was already
+-- inert; the flag's other job (submit-closing) is what
+-- moved into the new submit chain (userInputController.lua).
 function UserInputModel:keep_history()
-  return not self.oneshot
+  return true
 end
 
 --- @private
@@ -491,6 +634,9 @@ function UserInputModel:_update_cursor(replace_line)
   local cl = self:get_cursor_y()
   local t = self:get_text()
   if replace_line then
+    -- DEBT: c is measured on t[cl] while l is set to #t
+    -- (doc/development/technical_debt/input.md,
+    -- "_update_cursor measures the column on the wrong line").
     self.cursor.c = string.ulen(t[cl]) + 1
     self.cursor.l = #t
   else
@@ -510,13 +656,26 @@ function UserInputModel:_advance_cursor(x, y)
     self.cursor.c = next
   else
     self.cursor.l = cur_l + move_y
-    -- TODO multiline
   end
 end
 
 --- @param c Cursor
 function UserInputModel:set_cursor(c)
   self.cursor = c
+end
+
+--- @private
+--- Clamp self.cursor into the current text's valid range,
+--- counted in characters like every other cursor move —
+--- set_text(t, true)'s landing when the
+--- new content is shorter than the preserved cursor
+--- position (doc/input_api.md, "Live changes").
+function UserInputModel:_clamp_cursor_pos()
+  local n = self:get_n_text_lines()
+  local l = math.max(1, math.min(self.cursor.l, n))
+  local llen = string.ulen(self:get_text_line(l))
+  local c = math.max(1, math.min(self.cursor.c, llen + 1))
+  self:set_cursor(Cursor(l, c))
 end
 
 --- @param y integer?
@@ -531,7 +690,7 @@ function UserInputModel:move_cursor(y, x, selection)
   else
     l = prev_l
   end
-  local llen = #(self:get_text_line(l))
+  local llen = string.ulen(self:get_text_line(l))
   local char_limit = llen + 1
   if x and x >= 1 and x <= char_limit then
     c = x
@@ -572,20 +731,35 @@ function UserInputModel:get_cursor_y()
   return self.cursor.l
 end
 
+--- Whether the cursor sits on a text boundary.
+--- 'up'/'down' (and nil, meaning either) compare the line
+--- only. 'left'/'right' are two-dimensional: with scope
+--- 'line' the column edge alone is the limit; with scope
+--- 'input' (the default, forced for single-line text) the
+--- line must be an edge too, so left at the very start
+--- doubles as the 'up' limit and right at the very end as
+--- the 'down' limit.
 --- @param dir VerticalDir?
+--- @param scope 'input'|'line'?
 --- @return boolean
-function UserInputModel:is_at_limit(dir)
+function UserInputModel:is_at_limit(dir, scope)
   local n = self:get_n_text_lines()
-  local cl = self:get_cursor_y()
-  if dir == 'down' then
-    return cl == n
-  elseif dir == 'up' then
-    return cl == 1
-  else
-    if n < 3 then return true end
-    local limit = cl == 1 or cl == n
-    return limit
+  local cl, cc = self:get_cursor_pos()
+  
+  if dir == 'up' then return cl == 1 end
+  if dir == 'down' then return cl == n end
+  if not dir then return cl == 1 or cl == n end
+  
+  local line = self:get_text_line(cl)
+  local line_end = string.ulen(line) + 1
+  local req = (n == 1) and 'input' or (scope or 'input')
+
+  if dir == 'left' then
+    return cc == 1 and (req == 'line' or cl == 1)
+  elseif dir == 'right' then
+    return cc == line_end and (req == 'line' or cl == n)
   end
+  return false
 end
 
 --- @return InputDTO
@@ -816,42 +990,60 @@ function UserInputModel:cancel()
   self:reset()
 end
 
+
+--- The parser reports an error column as a BYTE offset, and
+--- the cursor counts characters (doc/input_api.md, "Live
+--- changes"), so the two need reconciling before the caret is
+--- seated. An offset landing inside a character trims back to
+--- that character's start, which is where the caret belongs
+--- anyway. Same trim-and-retry shape as sanitize_utf8 above,
+--- because utf8.len answers nil for a cut-short prefix.
+--- @param line string
+--- @param byte_c integer
+--- @return integer
+local function char_col(line, byte_c)
+  if byte_c < 1 then return byte_c end
+  local pre = string.sub(line, 1, byte_c - 1)
+  local n = utf8.len(pre)
+  while not n do
+    pre = string.sub(pre, 1, -2)
+    n = utf8.len(pre)
+  end
+  return n + 1
+end
+
+--- @private
+--- On a reject, seat the cursor on the error position.
+--- @param ent InputText
+--- @return boolean ok
+--- @return string[]|Error[]|InputText result
+function UserInputModel:_apply_eval(ent)
+  local ok, result = self.evaluator:apply(ent)
+  if ok then return ok, result end
+  --- @TODO check line len and move to next if at end
+  local perr = result[1]
+  if not perr or not perr.c then return ok, result end
+  local c = char_col(self:get_text_line(perr.l), perr.c)
+  if c > 1 then c = c + 1 end
+  self:move_cursor(perr.l, c)
+  return ok, result
+end
+
 --- @param eval boolean
 --- @return boolean
 --- @return string[]|Error[]
+-- on_text_entered (userInputController.lua submit chain) is
+-- the "value ready" signal. See
+-- doc/development/internals/user_input.md,
+-- "Submit and cancel — widget-owned callback sequences".
 function UserInputModel:handle(eval)
   local ent = self:get_text()
   local ok, result
   if ent:non_empty() then
-    local ev = self.evaluator
     self:_remember()
     if eval then
-      ok, result = ev:apply(ent)
-      if ok then
-        if self.oneshot then
-          if love.harmony then
-            if love.harmony.utils then
-              love.harmony.utils.love_event('userinput')
-            end
-          else
-            --- @diagnostic disable-next-line: param-type-mismatch
-            love.event.push('userinput')
-          end
-        end
-      else
-        --- @TODO fix
-        local perr = result[1]
-        -- Log.debug(Debug.terse_t(perr, nil, nil, true))
-        if perr then
-          --- @TODO check line len and move to next if at end
-          if perr.c then
-            local c = perr.c
-            if c > 1 then c = c + 1 end
-            self:move_cursor(perr.l, c)
-          end
-        end
-        return false, result
-      end
+      ok, result = self:_apply_eval(ent)
+      if not ok then return false, result end
     else
       ok = true
     end

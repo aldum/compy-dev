@@ -12,7 +12,7 @@ require("model.project.project")
 --- @field cfg Config
 ConsoleModel = class.create(function(cfg)
   return {
-    input    = UserInputModel(cfg, LuaEval(), false, 'console'),
+    input    = UserInputModel(cfg, LuaEval(), 'console'),
     editor   = EditorModel(cfg),
     output   = CanvasModel(cfg),
     projects = ProjectService(),

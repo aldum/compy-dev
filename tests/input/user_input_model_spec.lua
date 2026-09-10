@@ -1,3 +1,7 @@
+-- Availability: the input model predates the Compy input API
+-- (introduced in 1.0.0-rc20260712); the set_text keep_cursor
+-- group is the one addition it brought.
+
 require("model.input.userInputModel")
 require("model.interpreter.eval.evaluator")
 require("util.string.string")
@@ -27,6 +31,26 @@ describe("input model spec #input", function()
   }
   mock.mock_love(love)
 
+  describe('the plain widget stays plain', function()
+    --- the console, project inputs and search construct
+    --- the model without the editing flag; the editor's
+    --- 1.1 extras must not leak into them
+    it('records no edit history', function()
+      local model = UserInputModel(mockConf, luaEval)
+      model:add_text('one two three')
+      model:add_text(' four')
+      assert.same({}, model.edit_history.steps)
+    end)
+
+    it('records with the editing flag on', function()
+      local model = UserInputModel(
+        mockConf, luaEval, nil, true)
+      model:add_text('one ')
+      model:add_text('two')
+      assert.is_true(#model.edit_history.steps > 0)
+    end)
+  end)
+
   -----------------
   --   ASCII     --
   -----------------
@@ -38,6 +62,23 @@ describe("input model spec #input", function()
       --- @diagnostic disable-next-line: invisible
       assert.same({ '42' }, model.error)
     end)
+
+    -- The parser reports the error column as a BYTE offset,
+    -- while the cursor counts characters, so a line with
+    -- multi-byte content needs the two reconciled before the
+    -- caret is seated. Without it the byte column overshoots
+    -- the line's character bound and the caret does not move
+    -- at all.
+    it('seats the caret in characters on a multi-byte line',
+      function()
+        local model = UserInputModel(mockConf, luaEval)
+        model:set_text({ 'x = "привет" +' })
+        model:move_cursor(1, 1)
+        model:handle(true)
+        local _, c = model:get_cursor_pos()
+        assert.is_true(c > 1)
+        assert.is_true(c <= string.ulen('x = "привет" +') + 1)
+      end)
   end)
 
   describe('invalid UTF-8', function()
@@ -65,6 +106,64 @@ describe("input model spec #input", function()
       local model = UserInputModel(mockConf, luaEval)
       model:set_text({ 'ok', invalid })
       assert.same({ 'ok', 'abc(' }, model:get_text())
+    end)
+  end)
+
+  -- Sibling of the group above, and for the same reason: the
+  -- cursor addresses content as (line, column), so content
+  -- that is not normalised makes that address ambiguous.
+  -- Invalid bytes leave a column's LENGTH undefined; a newline
+  -- inside a line leaves its POSITION undefined -- the caret
+  -- can sit past a line terminator. Both spellings of the one
+  -- documented shape therefore normalise the same way.
+  -- doc/development/internals/user_input.md, "Multiline input".
+  describe('embedded newlines', function()
+    it('set_text splits them in tables', function()
+      local model = UserInputModel(mockConf, luaEval)
+      model:set_text({ 'a\nb' })
+      assert.same({ 'a', 'b' }, model:get_text())
+    end)
+
+    -- string.split_array keeps an empty element rather than
+    -- dropping it, and a blank line is content.
+    it('set_text keeps empty lines while splitting', function()
+      local model = UserInputModel(mockConf, luaEval)
+      model:set_text({ 'a\nb', '', 'c' })
+      assert.same({ 'a', 'b', '', 'c' }, model:get_text())
+    end)
+
+    it('both spellings agree on the cursor', function()
+      local listed = UserInputModel(mockConf, luaEval)
+      listed:set_text({ 'a\nb' })
+      local strung = UserInputModel(mockConf, luaEval)
+      strung:set_text('a\nb')
+      assert.same({ strung:get_cursor_pos() },
+        { listed:get_cursor_pos() })
+    end)
+
+    -- The case a replaced content path gets wrong most easily:
+    -- the caret is parked past where the new content ends, so
+    -- a stale line index would seat it on a line that is gone.
+    -- Both spellings land at the end of the new content.
+    it('both land at the end of shorter content', function()
+      for _, replacement in ipairs({ 'x', { 'x' } }) do
+        local model = UserInputModel(mockConf, luaEval)
+        model:set_text({ 'one', 'two', 'three' })
+        model:move_cursor(3, 2)
+        model:set_text(replacement)
+        assert.same({ 1, 2 }, { model:get_cursor_pos() })
+      end
+    end)
+
+    -- Normalising to one path must not start accepting shapes
+    -- the two branches never did: content stands unchanged.
+    it('leaves content standing for a non-text value',
+      function()
+      local model = UserInputModel(mockConf, luaEval)
+      model:set_text({ 'kept' })
+      --- @diagnostic disable-next-line: param-type-mismatch
+      model:set_text(42)
+      assert.same({ 'kept' }, model:get_text())
     end)
   end)
 
@@ -174,6 +273,48 @@ describe("input model spec #input", function()
       assert.same(1 + ll, cc)
       assert.same(cl, len)
     end)
+  end)
+
+  -------------------------------
+  --  set_text keep_cursor     --
+  -------------------------------
+  -- Model fix: set_text's tail
+  -- jump_end() used to run unconditionally, making a
+  -- truthy keep_cursor silently ineffective.
+  -- doc/input_api.md, "Live changes": set_text(t) jumps
+  -- to end; set_text(t, true) preserves the cursor,
+  -- clamped if the new text is shorter than the old
+  -- cursor position.
+  describe('set_text keep_cursor', function()
+    local model = UserInputModel(mockConf, luaEval)
+
+    it('jumps to end when keep_cursor is falsy', function()
+      model:set_text('abcdef')
+      model:move_cursor(1, 2)
+      model:set_text('xyz')
+      local cl, cc = model:get_cursor_pos()
+      assert.same(1, cl)
+      assert.same(4, cc)
+    end)
+
+    it('preserves the cursor when keep_cursor is true',
+      function()
+        model:set_text('abcdef')
+        model:move_cursor(1, 3)
+        model:set_text('xyz', true)
+        local cl, cc = model:get_cursor_pos()
+        assert.same(1, cl)
+        assert.same(3, cc)
+      end)
+
+    it('clamps the preserved cursor when text shrinks',
+      function()
+        model:set_text('abcdef')
+        model:set_text('xy', true)
+        local cl, cc = model:get_cursor_pos()
+        assert.same(1, cl)
+        assert.same(3, cc)
+      end)
   end)
 
   describe('swaps lines', function()

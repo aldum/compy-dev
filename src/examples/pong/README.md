@@ -251,8 +251,8 @@ a small “dead zone” so it does not react instantly.
 
 Manual strategy:
 ```lua
-if love.keyboard.isDown("up") then dir = -1
-elseif love.keyboard.isDown("down") then dir = 1 end
+if Key.any_pressed("up") then dir = -1
+elseif Key.any_pressed("down") then dir = 1 end
 move_paddle(S.opp, dir, dt)
 ```
 Any new behavior can be added as:
