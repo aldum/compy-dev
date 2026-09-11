@@ -16,7 +16,6 @@ local new = function(cfg, ctrl)
     cfg = cfg,
     controller = ctrl,
     statusline = Statusline(cfg),
-    oneshot = ctrl.model.oneshot,
     start_h = h,
     canvas = gfx.newCanvas(w, h),
   }
@@ -25,7 +24,6 @@ end
 --- @class UserInputView : ViewBase
 --- @field controller UserInputController
 --- @field statusline table
---- @field oneshot boolean
 --- @field canvas love.Canvas
 UserInputView = class.create(new)
 
@@ -174,7 +172,7 @@ function UserInputView:render_input(input, status, time)
 
         if tlc then
           local ci = (function()
-            if hl[tlc.l] then
+            if hl and hl[tlc.l] then
               return hl[tlc.l][tlc.c]
             end
           end)()
@@ -258,6 +256,16 @@ function UserInputView:render_error(err_text)
   drawBackground()
 
   gfx.setColor(colors.input.error)
+  if self.controller.model.editing then
+    --- the refusal frame is the editor's 2.4.3; the
+    --- console and project inputs keep their plain
+    --- error text
+    gfx.rectangle("line",
+      1,
+      fh + 1,
+      drawableWidth - 2,
+      apparentHeight * fh - 2)
+  end
 
   for l, str in ipairs(err_text) do
     local breaks = 0 -- starting height is already calculated
@@ -288,8 +296,15 @@ function UserInputView:render(input, status, time)
 end
 
 --- Draw the pre-rendered canvas to screen
+-- doc/development/internals/user_input.md, "Submit and cancel —
+-- widget-owned callback sequences": oneshot is gone; the
+-- published input widget instance is the one view that skips
+-- this continuous per-frame update_view(). The boot-provisioned
+-- input widget owns its rendering updates; other controllers
+-- update before drawing. See the identity-redraw debt entry for
+-- the migration constraint.
 function UserInputView:draw()
-  if not self.controller:is_oneshot() then
+  if self.controller ~= love.state.user_input_controller then
     self.controller:update_view()
   end
   local b = self.cfg.statusline_border / 2

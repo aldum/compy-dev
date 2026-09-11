@@ -1,3 +1,6 @@
+> **Historical — a design-era sketch, not a description of the current code.**
+> See [`README.md`](README.md) in this directory.
+
 ```mermaid
 flowchart TD
   id1(( ))      --> booting

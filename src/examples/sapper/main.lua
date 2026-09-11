@@ -668,7 +668,8 @@ function single(x, y)
   end
 end
 
-function compy.singleclick(x, y)
+compy.input.hooks.singleclick = function(x, y)
+  -- Delayed clicks sample modifiers on arrival, not press.
   if not Key.shift() and not Key.alt() and not Key.ctrl()
   then
     single(x, y)
@@ -686,14 +687,22 @@ function doppel(x, y)
   end
 end
 
-function compy.doubleclick(x, y)
+compy.input.hooks.doubleclick = function(x, y)
   if not Key.shift() and not Key.alt() and not Key.ctrl()
   then
     doppel(x, y)
   end
 end
 
-function love.mousepressed(x, y)
+-- A hook, like the two derived clicks above, rather than
+-- love.mousepressed: one spelling per project reads better,
+-- and the captured form would claim the channel silently
+-- (doc/input_api.md, "Event hooks and shortcuts — when to use
+-- which"). The board owns the pointer for the whole run, so
+-- this consumes even the presses it does not act on -- the
+-- chord-less click is still the game's, and this project never
+-- expected the console below it to be typeable.
+compy.input.hooks.mousepressed = function(x, y)
   if Key.shift() and not Key.alt() and not Key.ctrl()
   then
     single(x, y)
@@ -702,6 +711,7 @@ function love.mousepressed(x, y)
   then
     doppel(x, y)
   end
+  return true
 end
 
 initModes()

@@ -1,3 +1,6 @@
+> **Historical — a design-era sketch, not a description of the current code.**
+> See [`README.md`](README.md) in this directory.
+
 ### Editor data structures
 
 ```mermaid
@@ -98,7 +101,6 @@ WrappedText *-- VisibleStructuredContent
 classDiagram
 
 class UserInputModel {
-  oneshot: boolean
   entered: InputText
   history: History
   evaluator: EvalBase

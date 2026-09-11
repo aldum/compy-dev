@@ -32,9 +32,9 @@ end
 -- Manual (second player)
 function strategy.manual(S, dt)
   local dir = 0
-  if love.keyboard.isDown("up") then
+  if Key.any_pressed("up") then
     dir = -1
-  elseif love.keyboard.isDown("down") then
+  elseif Key.any_pressed("down") then
     dir = 1
   end
   move_paddle(S.opp, dir, dt)

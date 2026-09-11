@@ -135,6 +135,29 @@ local luaTools = {
   highlighter = luaParser.highlighter
 }
 
+--- @param lines string[]
+--- @return SyntaxColoring
+LuaHighlighter = luaParser.highlighter
+
+--- @param lines string[]
+--- @return boolean ok
+--- @return Error[]? errors
+LuaSyntaxValidator = function(lines)
+  local ok, result = luaParser.parse(lines)
+  if ok then return true end
+  return false, { result }
+end
+
+--- @param filters function|function[]
+--- @return fun(lines: string[]): boolean, Error[]
+LineValidators = function(filters)
+  local parsed = Filters.validators_only(filters)
+  return function(lines)
+    local validators = parsed.line_validators
+    return validate({ line_validators = validators }, lines)
+  end
+end
+
 --- @param label string?
 --- @param filters Filters?
 --- @param custom_apply function?

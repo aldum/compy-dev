@@ -64,12 +64,17 @@ function cycle(c)
   return c + 1
 end
 
-local function shift()
-  return love.keyboard.isDown("lshift", "rshift")
-end
+-- These stay in the hook rather than becoming shortcuts, though
+-- 'space' / 'shift+space' / 'shift+r' name themselves like
+-- combos. A shortcut matches its modifier set EXACTLY, so a
+-- 'space' binding would stop firing while any unrelated
+-- modifier is held, where the hook fires whatever else is down.
+-- Nobody asked for that narrowing, and it is not visible in the
+-- diff that would introduce it (doc/input_api.md, "Event hooks
+-- and shortcuts").
 local function color_cycle(k)
   if k == "space" then
-    if shift() then
+    if Key.shift() then
       bg_color = cycle(bg_color)
     else
       color = cycle(color)
@@ -78,7 +83,7 @@ local function color_cycle(k)
 end
 function love.keyreleased(k)
   color_cycle(k)
-  if k == "r" and shift() then
+  if k == "r" and Key.shift() then
     setTime()
   end
   if k == "p" then
