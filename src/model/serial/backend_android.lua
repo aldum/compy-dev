@@ -30,18 +30,6 @@ local DIR_IN = 0x80
 local RX_SIZE = 64
 local READ_MS = 5
 local WRITE_MS = 1000
---- Bytes per poll on the way out. The Lua REPL on the board
---- is an interactive terminal — it echoes each character,
---- handles backspace, and its README has you connect with
---- screen — and it takes a command whole only up to a rate.
---- Measured over pyserial on a Mac, no Compy in the path,
---- the same command at different rates: in one write 0/5,
---- byte by byte back to back 0/5, at 0.5 ms 4/5, at 2 ms
---- 10/10, at 5 ms 10/10 — about the speed of typing.
---- MicroPython on the same board takes the whole string in
---- one write, 5/5, so the rate is this firmware's. A poll is
---- a frame, some 16 ms, well inside it.
-local TX_PER_POLL = 1
 local CTRL_MS = 1000
 --- PendingIntent.FLAG_IMMUTABLE, required on Android 12+
 local PI_IMMUTABLE = 0x04000000
@@ -356,9 +344,9 @@ function AndroidBackend:read()
   return jniReadBytes(env, port.rx, n)
 end
 
---- Queued, not written here: the bytes leave one per poll,
---- see TX_PER_POLL. A refusal therefore arrives as a fault
---- on the poll that does the write, not from this call.
+--- Queued, not written here: the bytes leave on the next
+--- poll. A refusal therefore arrives as a fault on the poll
+--- that does the write, not from this call.
 --- @param data string
 --- @return boolean? ok
 --- @return string? err
@@ -370,22 +358,21 @@ function AndroidBackend:send(data)
   return true
 end
 
---- One slice of the outgoing queue
+--- Everything waiting, in one write
 --- @return string? fault
 function AndroidBackend:write()
   if self.tx == '' then return end
   local env = self.env
   local port = self.port
-  local out = self.tx:sub(1, TX_PER_POLL)
+  local out = self.tx
   local arr = jniBytes(env, out)
   local n = jniCallInt(env, port.conn, port.bulkM,
     port.epOut, arr, #out, WRITE_MS)
   jniDropLocal(env, arr)
+  self.tx = ''
   if n ~= #out then
-    self.tx = ''
     return 'bulk write sent ' .. n .. ' of ' .. #out
   end
-  self.tx = self.tx:sub(#out + 1)
 end
 
 --- Is the open device still on the bus? Takes no global
