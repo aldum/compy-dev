@@ -14,6 +14,7 @@ local input = compy.input
 
 local PROMPT = "Lua> "
 local SETTLE_S = 0.2
+local RECALL = 100
 
 -- The board ends a line with CR, and an echoed one with
 -- CR CR LF. Whatever the mix, it means one new line.
@@ -81,12 +82,39 @@ else
   print("[plug the micro:bit in]")
 end
 
+-- What has been sent, newest last, the hundred most recent
+-- of them. The widget keeps a history of its own but hands
+-- it to nobody, so the walk through this one is ours: at is
+-- where the walk has got to, and past the end is where it
+-- rests, on the line being typed.
+local sent = {}
+local at = 1
+
+--- @param text string
+local function remember(text)
+  if text == "" or text == sent[#sent] then return end
+  sent[#sent + 1] = text
+  if #sent > RECALL then table.remove(sent, 1) end
+end
+
+-- One step through what was sent; off the near end is the
+-- oldest, off the far end is an empty line to type on.
+--- @param step integer
+local function recall(step)
+  at = at + step
+  if at < 1 then at = 1 end
+  if at > #sent + 1 then at = #sent + 1 end
+  input.set_text(sent[at] or "")
+end
+
 -- What was typed, the way the REPL reads it: CR ends a line.
 -- The prompt above was written with the line left open and
 -- the typed text has just landed on it, so close it: what
 -- the board says next starts on a line of its own.
 --- @param text string
 local function sendLine(text)
+  remember(text)
+  at = #sent + 1
   io.write("\n")
   local cr = text:gsub("\n", "\r")
   local ok, err = serial.send(cr .. "\r")
@@ -96,6 +124,13 @@ local function sendLine(text)
 end
 
 input.callbacks.after_submit = input.clear
+
+-- The caret trying to leave the field is how the widget says
+-- that an earlier line was asked for.
+input.callbacks.on_limit_reached = function(dir)
+  if dir == "up" then recall(-1) end
+  if dir == "down" then recall(1) end
+end
 
 input.show{
   prompt = PROMPT,
