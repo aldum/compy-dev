@@ -30,6 +30,19 @@ local DIR_IN = 0x80
 local RX_SIZE = 64
 local READ_MS = 5
 local WRITE_MS = 1000
+--- Bytes per poll on the way out. The board's Lua REPL is
+--- an interactive terminal and drops the tail of anything
+--- written faster than it reads.
+---
+--- The firmware has since grown a serial RX ring of 254
+--- bytes where it had twenty, and over pyserial on a Mac a
+--- whole command now arrives ten times out of ten — so this
+--- was taken out. It goes back in: from Compy the writes go
+--- through JNI in one bulk transfer, which is not the same
+--- path, and there a command still arrives cut short and
+--- its tail turns up with the next one. What was measured
+--- on a Mac says nothing about this one.
+local TX_PER_POLL = 1
 local CTRL_MS = 1000
 --- PendingIntent.FLAG_IMMUTABLE, required on Android 12+
 local PI_IMMUTABLE = 0x04000000
@@ -344,9 +357,9 @@ function AndroidBackend:read()
   return jniReadBytes(env, port.rx, n)
 end
 
---- Queued, not written here: the bytes leave on the next
---- poll. A refusal therefore arrives as a fault on the poll
---- that does the write, not from this call.
+--- Queued, not written here: the bytes leave one per poll,
+--- see TX_PER_POLL. A refusal therefore arrives as a fault
+--- on the poll that does the write, not from this call.
 --- @param data string
 --- @return boolean? ok
 --- @return string? err
@@ -358,21 +371,22 @@ function AndroidBackend:send(data)
   return true
 end
 
---- Everything waiting, in one write
+--- One slice of the outgoing queue
 --- @return string? fault
 function AndroidBackend:write()
   if self.tx == '' then return end
   local env = self.env
   local port = self.port
-  local out = self.tx
+  local out = self.tx:sub(1, TX_PER_POLL)
   local arr = jniBytes(env, out)
   local n = jniCallInt(env, port.conn, port.bulkM,
     port.epOut, arr, #out, WRITE_MS)
   jniDropLocal(env, arr)
-  self.tx = ''
   if n ~= #out then
+    self.tx = ''
     return 'bulk write sent ' .. n .. ' of ' .. #out
   end
+  self.tx = self.tx:sub(#out + 1)
 end
 
 --- Is the open device still on the bus? Takes no global
