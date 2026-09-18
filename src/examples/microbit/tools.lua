@@ -12,6 +12,10 @@
 -- the commands around it — feed it a file, run one.
 
 local serial = compy.serial
+local hex = require("hex")
+
+local HEX = "MICROBIT.hex"
+local LUA = "MICROBIT.lua"
 
 local EXEC_PREFIX = "assert(loadstring [[\r"
 local EXEC_SUFFIX = "]])()\r"
@@ -69,18 +73,156 @@ function exec(filename)
   assert(serial.send(code))
 end
 
+-- firmware ---------------------------------------------------
+
+--- The blocks of a hex file in the project
+--- @param filename string
+--- @return table[]
+local function blocksOf(filename)
+  return hex.parse(assert(readfile(filename),
+    "no " .. filename))
+end
+
+--- Where a hex file's data sits
+--- @param blocks table[]
+local function regions(blocks)
+  for _, b in ipairs(blocks) do
+    print(string.format("%08X - %08X  %d bytes",
+      b.addr, b.addr + #b.data - 1, #b.data))
+  end
+end
+
+--- What a hex file is made of: where its data sits, where
+--- the firmware keeps its Lua script, and how that script
+--- begins.
+--- @param filename string?
+function hexmap(filename)
+  local blocks = blocksOf(filename or HEX)
+  regions(blocks)
+  local addr, meta = hex.meta(blocks)
+  if not addr then
+    print("no Lua script inside")
+    return
+  end
+  print(string.format("script %08X - %08X  %d of %d",
+    meta.start, meta.stop, meta.size, meta.space))
+  print(hex.script(blocks):sub(1, 60))
+end
+
+--- Take the Lua script out of a hex file and keep it
+--- @param hex_name string?
+--- @param lua_name string?
+function extract(hex_name, lua_name)
+  local name = lua_name or LUA
+  writefile(name, hex.script(blocksOf(hex_name or HEX)))
+  print("wrote " .. name)
+end
+
+--- Put a Lua script into a hex file. MICROBIT.hex is always
+--- the firmware read from, and never the one written to: it
+--- is the one copy that has to stay as it came.
+--- @param hex_name string
+--- @param lua_name string?
+function embed(hex_name, lua_name)
+  assert(hex_name, "name the hex file to write")
+  assert(hex_name ~= HEX, HEX .. " cannot be overwritten")
+  local name = lua_name or LUA
+  local blocks = blocksOf(HEX)
+  hex.embed(blocks, assert(readfile(name), "no " .. name))
+  writefile(hex_name, hex.write(blocks))
+  print("wrote " .. hex_name)
+end
+
+--- What a file has to say: its lines, less the blank ones
+--- and the comments. A directive is a comment too, and is
+--- left in for the caller to recognise.
+--- @param filename string
+--- @return string[]
+local function linesOf(filename)
+  local kept = {}
+  local text = assert(readfile(filename), "no " .. filename)
+  for line in text:gmatch("[^\r\n]*") do
+    local code = line:find("%S") and not line:find("^%s*%-%-")
+    if code or line:find("^%s*%-%->>?%s+%S+%s*$") then
+      kept[#kept + 1] = line
+    end
+  end
+  return kept
+end
+
+--- The file a directive names, or nothing
+--- @param line string
+--- @return string? name
+--- @return boolean? wrapped
+local function included(line)
+  local plain = line:match("^%s*%-%->>%s+(%S+)%s*$")
+  if plain then return plain, false end
+  local wrapped = line:match("^%s*%-%->%s+(%S+)%s*$")
+  if wrapped then return wrapped, true end
+end
+
+--- An included file, as it stands. Its own directives are
+--- comments here: a reference is not followed further.
+--- @param out string[]
+--- @param filename string
+local function bring(out, filename)
+  for _, line in ipairs(linesOf(filename)) do
+    if not included(line) then out[#out + 1] = line end
+  end
+end
+
+--- One line of the source: itself, or the file it names
+--- @param out string[]
+--- @param line string
+local function expand(out, line)
+  local name, wrapped = included(line)
+  if not name then
+    out[#out + 1] = line
+  elseif wrapped then
+    out[#out + 1] = "assert(loadstring[["
+    bring(out, name)
+    out[#out + 1] = "]])()"
+  else
+    bring(out, name)
+  end
+end
+
+--- Build one Lua file out of several and put it in the
+--- firmware. A line "--> name" brings that file in wrapped
+--- in a chunk of its own, so what it declares stays there;
+--- "-->> name" brings it in as it stands.
+--- @param lua_name string
+--- @param hex_name string?
+function compile(lua_name, hex_name)
+  assert(lua_name, "name the lua file to compile")
+  assert(lua_name ~= LUA, LUA .. " is the one it builds")
+  local out = {}
+  for _, line in ipairs(linesOf(lua_name)) do
+    expand(out, line)
+  end
+  writefile(LUA, table.concat(out, "\n") .. "\n")
+  embed(hex_name or (lua_name:gsub("%.lua$", "") .. ".hex"))
+end
+
 -- help --------------------------------------------------------
+
+local COMMANDS = {
+  "help()                  this list",
+  "echo(on)                board output in the console;",
+  "                        echo(false) stops it, echo()",
+  "                        resumes",
+  "send(filename)          file to the board, as typed",
+  "exec(filename)          file to the board, run as one",
+  "                        chunk",
+  "hexmap(hex)             what a hex file holds",
+  "extract(hex, lua)       its script out to a file",
+  "embed(hex, lua)         a script into a new hex",
+  "compile(lua, hex)       files into one, then into a hex",
+}
 
 function help()
   print("micro:bit tools")
-  print("  help()                    this list")
-  print("  echo(on)                  board output in the")
-  print("                            console; echo(false)")
-  print("                            stops it, echo() resumes")
-  print("  send(filename)            file to the board,")
-  print("                            as typed")
-  print("  exec(filename)            file to the board,")
-  print("                            run as one chunk")
+  for _, line in ipairs(COMMANDS) do print("  " .. line) end
   print("")
   print("Write the files with edit(filename), type to the")
   print("board in the \"terminal\" project.")
