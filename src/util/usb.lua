@@ -16,6 +16,7 @@ local supported_os = {
   Android = true,
 }
 
+
 --- @param n integer|string
 --- @return string
 local function hex4(n)
@@ -166,7 +167,7 @@ function usb.detect()
   local vid, pid = vid_pid()
   local _, mounts = OS.runcmd('cat /proc/mounts')
   local candidates = {}
-  for _, m in ipairs(usb.parse_mounts(mounts)) do
+  for _, m in ipairs(usb.parse_mounts(mounts or '')) do
     if usb.is_removable_fat(m.type, m.path) then
       table.insert(candidates, m)
     end

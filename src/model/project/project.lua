@@ -328,7 +328,7 @@ function ProjectService:open(name, play)
 end
 
 --- @param name string
---- @param play boolean
+--- @param play boolean?
 --- @return boolean open
 --- @return boolean create
 --- @return string? err

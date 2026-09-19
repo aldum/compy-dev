@@ -1458,12 +1458,14 @@ function ConsoleController.prepare_project_env(cc)
   --- @param name string
   --- @return string?
   project_env.readfile         = function(name)
+    --- @diagnostic disable-next-line: invisible
     return check_open_pr(cc._readfile, cc, name)
   end
 
   --- @param name string
   --- @return string[]?
   project_env.readlines        = function(name)
+    --- @diagnostic disable-next-line: invisible
     return check_open_pr(cc._readlines, cc, name)
   end
 
@@ -1721,7 +1723,7 @@ function ConsoleController:suspend_run(msg)
 end
 
 --- @param name string
---- @param play boolean
+--- @param play boolean?
 --- @return boolean success
 function ConsoleController:open_project(name, play)
   local P = self.model.projects
