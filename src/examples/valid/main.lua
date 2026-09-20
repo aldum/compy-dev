@@ -1,5 +1,3 @@
-r = user_input()
-
 function min_length(n)
   return function(s)
     local l = string.ulen(s)
@@ -72,13 +70,17 @@ function is_natural(s)
   end
 end
 
-function love.update()
-  if r:is_empty() then
-    validated_input({
-      min_length(2),
-      is_lower
-    })
-  else
-    print(r())
-  end
-end
+-- Continuous-session idiom (doc/input_api.md, "Submit
+-- lifecycle"): consume the text in on_text_entered. The widget
+-- stays shown by default and submit clears the field, so the
+-- next line starts empty with no callback and no re-show. The
+-- line validator prevents invalid lines from reaching the
+-- submit callback. No lifecycle flag is configured here: the
+-- defaults are what a continuous prompt wants.
+compy.input.show{
+  validator = LineValidators({
+    min_length(2),
+    is_lower
+  }),
+  on_text_entered = function(text) print(text) end,
+}

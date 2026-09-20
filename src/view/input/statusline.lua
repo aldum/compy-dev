@@ -69,7 +69,16 @@ function Statusline:draw(status, start_y)
     gfx.setColor(colors.fg)
     local label = status.label
     if label then
-      gfx.print(label, start_text.x, start_text.y)
+      local text = label
+      if type(label) == 'table' then
+        text = label.text
+        local tone = label.tone
+        if tone and tone ~= 'default' and colors[tone] then
+          gfx.setColor(colors[tone])
+        end
+      end
+      gfx.print(text, start_text.x, start_text.y)
+      gfx.setColor(colors.fg)
     end
     if love.DEBUG then
       gfx.setColor(cf.colors.debug)
@@ -152,7 +161,6 @@ function Statusline:draw(status, start_y)
         gfx.setColor(colors.fg)
         gfx.print(more_b, s_mb, start_text.y)
         -- filename
-        gfx.setColor(Color[Color.white])
         gfx.print(custom.name, s_n, start_text.y)
       else
         --- normal statusline
