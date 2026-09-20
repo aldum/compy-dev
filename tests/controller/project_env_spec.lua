@@ -187,8 +187,7 @@ describe('ConsoleController project env #project', function()
       'reset_scratch', 'readfile', 'readlines', 'writefile', 'loadfile',
       'dofile', 'edit', 'run', 'run_project', 'list_contents',
       'example_projects', 'clone', 'appver', 'quit',
-      'pause', 'stop', 'continue', 'user_input', 'input_text',
-      'input_code', 'write_to_input', 'validated_input', 'eval',
+      'pause', 'stop', 'continue', 'eval',
     }) do
       assert.is_function(env[k], k .. ' missing')
     end

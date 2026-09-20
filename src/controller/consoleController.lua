@@ -1362,6 +1362,11 @@ function ConsoleController.prepare_project_env(cc)
   local P                      = cc.model.projects
 
   project_env.gfx              = love.graphics
+  -- The env the old prepare_env wired was the global environment,
+  -- so its `gfx` write surfaced as the global the console core
+  -- (use_canvas) and the projects read; main.lua sets the same
+  -- global for the app. Keep that alias on the unified prep.
+  gfx                          = love.graphics
 
   --- @param f function
   local check_open_pr          = function(f, ...)
