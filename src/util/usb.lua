@@ -9,7 +9,7 @@ local usb = {}
 
 usb.MICROBIT_LABEL = 'MICROBIT'
 --- DAPLink drives (micro:bit v1/v2) ship this file at the root
-usb.MICROBIT_MARKER = 'INFO_UF2.TXT'
+usb.MICROBIT_MARKER = 'DETAILS.TXT'
 
 local supported_os = {
   Linux = true,
@@ -55,14 +55,13 @@ function usb.parse_mounts(mounts)
   return out
 end
 
---- Candidate removable-storage mount: a real FAT filesystem
---- mounted somewhere removable (not the Android emulated/SD FUSE).
+--- Candidate removable-storage mount
 --- @param fstype string
 --- @param path string
 --- @return boolean
 function usb.is_removable_fat(fstype, path)
   if fstype ~= 'vfat' and fstype ~= 'exfat' and fstype ~= 'msdos'
-      and fstype ~= 'fuseblk' then
+      and fstype ~= 'fuseblk' and fstype ~= 'fuse' then
     return false
   end
   return string.matches_r(path, '^/storage/')
