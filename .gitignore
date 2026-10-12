@@ -20,3 +20,11 @@ src/ver.txt
 tests/autotest.lua
 host.lua
 local.just
+*.swp
+*.swo
+*~
+docker-data
+*.jks
+*.keystore
+*.p12
+*.pfx

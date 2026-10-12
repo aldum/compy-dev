@@ -14,20 +14,39 @@ local held = {
   rgui = false,
 }
 
+-- Emacs notation for the left-hand modifiers. The right-hand
+-- keys have no letter in it, so a test names the key itself:
+-- 'rctrl-x'.
 local mods = {
   C = 'lctrl',
   S = 'lshift',
   M = 'lalt',
+  rctrl  = 'rctrl',
+  rshift = 'rshift',
+  ralt   = 'ralt',
 }
 
 local W = 1024
 local H = 600
 
 --- @param t love
+--- sounds played since the last mock_love()
+local played = {}
+
 local function mock_love(t)
+  played = {}
   local love = {
     keyboard = {
-      isDown = function(k) return held[k] end
+      -- Variadic, as LÖVE's is: Key.ctrl() asks isDown('lctrl',
+      -- 'rctrl'), so a one-argument mock silently answers for
+      -- the left key alone and no test can hold a right-hand
+      -- modifier.
+      isDown = function(...)
+        for _, k in ipairs({ ... }) do
+          if held[k] then return true end
+        end
+        return false
+      end
     },
     graphics = {
       mock = true,
@@ -37,6 +56,17 @@ local function mock_love(t)
       newCanvas = function() end,
       setCanvas = function() end,
       clear = function() end,
+    },
+    audio = {
+      mock = true,
+      --- util.audio builds its sources on require
+      newSource = function(name)
+        return { name = name }
+      end,
+      stop = function() end,
+      play = function(source)
+        table.insert(played, source and source.name)
+      end,
     },
   }
   for k, v in pairs(t) do
@@ -52,10 +82,27 @@ local function release_keys()
   end
 end
 
+--- Physical key state, for drivers that emit raw events rather
+--- than whole combos: hardware has the key down before its
+--- keypressed arrives and up before its keyreleased does, so an
+--- event driver sets this itself.
+--- @param k string
+local function hold(k)
+  held[k] = true
+end
+
+--- @param k string
+local function unhold(k)
+  held[k] = false
+end
+
 --- @param s string
---- @param press function
+--- @param press function?
 --- @param hold boolean?
-local function keystroke(s, press, hold)
+--- @param opts table?  e.g. {isrepeat=true, scancode='a'}
+local function keystroke(s, press, hold, opts)
+  local isrepeat = opts and opts.isrepeat or false
+  local scancode = opts and opts.scancode or ''
   local keypress = press or love.keypressed
   local ks = string.split(s, '-')
   for _, v in ipairs(ks) do
@@ -63,7 +110,7 @@ local function keystroke(s, press, hold)
     if m then
       held[m] = true
     else
-      keypress(v)
+      keypress(v, scancode, isrepeat)
     end
   end
   if not hold then
@@ -71,8 +118,27 @@ local function keystroke(s, press, hold)
   end
 end
 
+--- Emit a textinput(t) event through the installed handler.
+--- Independently orderable relative to keypressed
+--- (doc/development/internals/user_input.md, "Data flow": no
+--- ordering guarantee between keypressed and textinput on real
+--- devices).
+--- @param t string
+--- @param press function?  defaults to love.handlers.textinput
+local function textinput(t, press)
+  local handler = press
+  if not handler and love.handlers then
+    handler = love.handlers.textinput
+  end
+  if handler then handler(t) end
+end
+
 return {
-  mock_love = mock_love,
-  keystroke = keystroke,
+  mock_love    = mock_love,
+  played_sounds = function() return played end,
+  keystroke    = keystroke,
+  textinput    = textinput,
   release_keys = release_keys,
+  hold         = hold,
+  unhold       = unhold,
 }

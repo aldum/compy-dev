@@ -513,6 +513,17 @@ else
     return os.remove(path)
   end
 
+  --- @return boolean ran
+  function FS.sync()
+    return true
+  end
+
+  --- @param path string
+  --- @return boolean durable
+  function FS.fsync(path)
+    return true
+  end
+
   --- @param content str
   --- @param ext string?
   --- @param fixname string?

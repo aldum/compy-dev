@@ -1,5 +1,6 @@
 local redirect_to = require("model.io.redirect")
 local OS = require("util.os")
+local AndroidStorage = require("util.androidStorage")
 
 require("model.consoleModel")
 require("controller.controller")
@@ -122,28 +123,32 @@ local config_view = function(flags)
   }
 end
 
---- Find removable and user-writable storage
---- Assumptions are made, which might be specific to the target
---- platform/device
+--- Find the SD card's storage root
 --- @return boolean success
 --- @return string? path
 local android_storage_find = function()
-  -- Yes, I know. We are working with the limitations
-  --- of Android here.
-  local quadhex = string.times('[0-9A-F]', 4)
-  local uuid_regex = quadhex .. '-' .. quadhex
-  local regex = '/dev/fuse /storage/' .. uuid_regex
-  local grep = string.format("grep /proc/mounts -e '%s'", regex)
-  local _, result = OS.runcmd(grep)
-  local lines = string.lines(result or '')
-  if not string.is_non_empty_string_array(lines) then
-    return false
-  end
-  local tok = string.split(lines[1], ' ')
-  if string.is_non_empty_string_array(tok) then
-    return true, tok[2]
-  end
+  local _, mounts = OS.runcmd('cat /proc/mounts')
+  local root = AndroidStorage.find_card(mounts or '')
+  if root then return true, root end
   return false
+end
+
+--- Prove that the removable project root supports the writes the IDE needs.
+--- @param storage_path string
+--- @return boolean success
+--- @return string? error
+local storage_projects_writable = function(storage_path)
+  local projects = FS.join_path(storage_path, 'projects')
+  local ok, err = FS.mkdirp(projects)
+  if not ok then return false, err end
+
+  local probe = FS.join_path(projects, '.compy-write-probe')
+  ok, err = FS.write(probe, 'Compy IDE storage probe\n')
+  if not ok then return false, err end
+
+  ok, err = FS.rm(probe)
+  if not ok then return false, err end
+  return true
 end
 
 --- @param mode Mode
@@ -153,7 +158,7 @@ local setup_storage = function(mode)
   local id = love.filesystem.getIdentity()
   local harmony = love.harmony
   local storage_path = ''
-  local has_removable = false
+  local has_removable
 
   if harmony then
     id = id .. '-harmony'
@@ -170,13 +175,23 @@ local setup_storage = function(mode)
       if mode == 'play' then
         --- initializing directory moved to app code
       else
-        local ok, sd_path = android_storage_find()
-        if not ok then
-          print('WARN: SD card not found')
-          sd_path = '/storage/emulated/0'
+        local found, sd_path = android_storage_find()
+        if found then
+          local candidate = string.format("%s/Documents/%s", sd_path, id)
+          local writable, write_err = storage_projects_writable(candidate)
+          if writable then
+            storage_path = candidate
+            has_removable = true
+          else
+            print('WARN: SD card is not writable: ' .. tostring(write_err))
+          end
         end
-        has_removable = true
-        storage_path = string.format("%s/Documents/%s", sd_path, id)
+        if not has_removable then
+          if not found then print('WARN: SD card not found') end
+          storage_path = string.format("%s/Documents/%s",
+            '/storage/emulated/0', id)
+          has_removable = false
+        end
         print('INFO: Project path: ' .. storage_path)
       end
     elseif OS.get_name() == 'Web' then
@@ -354,6 +369,21 @@ function love.load()
   end
   local ctrl = Controller
   --- MVC wiring
+  -- The reusable seam now exists (free-function `dispatch` +
+  -- the `build_widget_api` factory in consoleController.lua),
+  -- so console/editor COULD rewire onto it. They stay on their
+  -- own separate `UserInputController` instances anyway,
+  -- because console's `inspect`-mode REPL state must persist
+  -- independently of the project's (doc/development/internals/
+  -- user_input.md, "inspect mode") — a single shared instance
+  -- would be clobbered across that boundary. Migration is
+  -- therefore deliberately deferred (D-ROUTE-OWNS), not
+  -- blocked. The PROJECT's widget is not built here at all: it
+  -- lives for one project run and is constructed at the run
+  -- seam (consoleController.lua, run_project; D-WIDGET-AT-BOOT
+  -- as amended). Between runs
+  -- `love.state.user_input_controller` is nil, and every
+  -- consumer of it resolves it dynamically and guards.
   local CM = ConsoleModel(baseconf)
   redirect_to(CM)
   local CC = ConsoleController(CM, ctrl)

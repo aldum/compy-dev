@@ -11,7 +11,8 @@ local class = require('util.class')
 --- @field cfg Config
 EditorModel = class.create(function(cfg)
   return {
-    input = UserInputModel(cfg, LuaEval()),
+    -- editing = true: the editor's rich input (#45).
+    input = UserInputModel(cfg, LuaEval(), nil, true),
     buffers = Dequeue.new({}, 'BufferModel'),
     search = Search(cfg),
     cfg = cfg,

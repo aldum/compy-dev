@@ -327,7 +327,7 @@ keydown = {
 function update_player(dt)
   local dir = 0
   for k, v in pairs(keydown) do
-    if love.keyboard.isDown(k) then
+    if Key.any_pressed(k) then
       dir = v
     end
   end

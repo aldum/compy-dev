@@ -12,15 +12,16 @@ FAVI := "favicon.ico"
 DIST := "dist"
 WEBDIST := "./dist/web"
 WEBDIST-c := "./dist/web-c"
+BUSTED := "./util/run-busted"
 
 # run unit tests on file change
 unit_test:
-  @{{MON}} -e 'lua' --exec 'echo -en "\n\n\n\n------------- BUSTED -------------\n"; busted tests'
+  @{{MON}} -e 'lua' --exec 'echo -en "\n\n\n\n------------- BUSTED -------------\n"; {{BUSTED}} tests'
 unit_test_brief:
-  @{{MON}} -e 'lua' --exec 'echo -en "\n\n\n\n------------- BUSTED -------------\n"; busted tests -o tests/brief_output.lua'
+  @{{MON}} -e 'lua' --exec 'echo -en "\n\n\n\n------------- BUSTED -------------\n"; {{BUSTED}} tests -o tests/brief_output.lua'
 unit_test_tag TAG:
   @{{MON}} -e lua \
-    --exec 'echo -en "\n\n\n\n------------- BUSTED -------------\n" ; busted tests --defer-print --tags="{{TAG}}"'
+    --exec 'echo -en "\n\n\n\n------------- BUSTED -------------\n" ; {{BUSTED}} tests --defer-print --tags="{{TAG}}"'
 unit_test_ast:
   @just unit_test_tag ast
 unit_test_src:
@@ -32,9 +33,9 @@ unit_test_analyzer:
 
 # run unit tests of this tag once
 ut TAG:
-  @busted tests --tags {{TAG}}
+  @{{BUSTED}} tests --tags {{TAG}}
 ut_all:
-  @busted tests
+  @{{BUSTED}} tests
 
 # run app on file change
 dev:
@@ -135,29 +136,26 @@ VERSION := `git describe --tags --long --always`
 
 package: version
   @rm -f {{DIST}}/game.love
-  @7z -tzip a {{DIST}}/game.love ./src/* > /dev/null
+  @(cd ./src && zip -qr ../{{DIST}}/game.love .)
   @echo packaged:
   @ls -lh {{DIST}}/game.love
 
 package-web: package-js
   @rm -f {{DIST}}/{{PRODUCT_NAME}}-web.zip
-  @7z a {{DIST}}/{{PRODUCT_NAME}}-web.zip {{WEBDIST}}/* \
-    > /dev/null
+  @(cd {{WEBDIST}} && zip -qr ../{{PRODUCT_NAME}}-web.zip .)
   @echo packaged:
   @ls -lh {{DIST}}/{{PRODUCT_NAME}}-web.zip
 package-web-c: package-js-c
   @rm -f {{DIST}}/{{PRODUCT_NAME}}-web-compat.zip
-  @7z a {{DIST}}/{{PRODUCT_NAME}}-web-compat.zip {{WEBDIST}}/* \
-    > /dev/null
+  @(cd {{WEBDIST-c}} && zip -qr ../{{PRODUCT_NAME}}-web-compat.zip .)
   @echo packaged:
   @ls -lh {{DIST}}/{{PRODUCT_NAME}}-web-compat.zip
 
 # package an example to a .compy
 zip-example name:
   #!/usr/bin/env -S bash
-  PKG="dist/{{name}}.compy"
-  7z -tzip a "$PKG" \
-     ./src/examples/{{name}}/* &> /dev/null \
+  PKG="$PWD/dist/{{name}}.compy"
+  (cd "./src/examples/{{name}}" && zip -qr "$PKG" .) &> /dev/null \
       && ls "$PKG" \
       || echo 'ENOENT'
 
@@ -185,11 +183,11 @@ package-js-dir DT: version
   node render_md.js
   rm ../$WEB/theme/bg.png
   # cp index.html ../$WEB
-  sed -e 's/%%VERSION%%/{{VERSION}}/' index.html \
+  sed -e 's:%%VERSION%%:{{VERSION}}:' index.html \
       > ../$WEB/index.html
   cat head.html ../{{DIST}}/_readme.html \
       >  ../$WEB/readme.html
-  sed -e 's/%%VERSION%%/{{VERSION}}/' tail.html \
+  sed -e 's:%%VERSION%%:{{VERSION}}:' tail.html \
       >> ../$WEB/readme.html
   cp love.css ../$WEB/theme/
 
